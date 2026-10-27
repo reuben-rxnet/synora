@@ -1,6 +1,6 @@
 // Synora sync worker: runs queued jobs and schedules connector syncs. Start with `npm run worker`.
 import { db } from "@/lib/db";
-import { claimJob, enqueue, finishJob } from "@/lib/jobs";
+import { claimJob, enqueue, finishJob, renewLease, requeueInterrupted } from "@/lib/jobs";
 import { runSync } from "@/lib/connectors/sync";
 import { ConnectorError } from "@/lib/connectors/types";
 
@@ -13,9 +13,12 @@ async function scheduleDueSyncs() {
 }
 
 async function tick() {
+  const resumed = await requeueInterrupted();
+  if (resumed) console.log(`[worker] ${resumed} interrupted job${resumed > 1 ? "s" : ""} queued again; syncs continue from their saved position.`);
   await scheduleDueSyncs();
   for (let job = await claimJob(); job && !stopping; job = await claimJob()) {
     const started = Date.now();
+    const heartbeat = setInterval(() => void renewLease(job!.id).catch(() => undefined), 60_000);
     try {
       if (job.kind === "sync") {
         const { connectorId, full } = job.payload as { connectorId: string; full?: boolean };
@@ -29,6 +32,8 @@ async function tick() {
       if (e instanceof ConnectorError && !e.retryable) await db.job.update({ where: { id: job.id }, data: { maxAttempts: job.attempts } });
       await finishJob(job.id, message);
       console.error(`[worker] job ${job.kind} failed: ${message}`);
+    } finally {
+      clearInterval(heartbeat);
     }
   }
 }

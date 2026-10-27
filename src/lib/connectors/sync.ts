@@ -16,6 +16,10 @@ export function secretReader(secretRef: string | null) {
 export async function runSync(connectorId: string, opts: { full?: boolean } = {}) {
   const c = await db.connector.findUniqueOrThrow({ where: { id: connectorId } });
   if (c.status === "paused") return { skipped: "paused" as const };
+  // A run still marked "running" belongs to a worker that stopped; this run continues from its saved cursor.
+  const note = { errorCode: "INTERRUPTED", errorText: "Interrupted because the sync worker stopped. The next run continued from where this one stopped.", finishedAt: new Date() };
+  await db.syncRun.updateMany({ where: { connectorId, status: "running", OR: [{ added: { gt: 0 } }, { updated: { gt: 0 } }] }, data: { ...note, status: "partial" } });
+  await db.syncRun.updateMany({ where: { connectorId, status: "running" }, data: { ...note, status: "failed" } });
   const run = await db.syncRun.create({ data: { connectorId, kind: opts.full || !c.cursor ? "full" : "incremental" } });
   await db.connector.update({ where: { id: connectorId }, data: { status: "syncing", statusNote: null } });
 
