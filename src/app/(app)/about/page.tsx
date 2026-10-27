@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requirePageSession } from "@/lib/auth/session";
 import { activeProvider } from "@/lib/search/answer";
 import { Badge, Icon, KindBadge, StatusPill } from "@/components/ui";
+import { AboutSearch } from "@/components/about-search";
 import pkg from "../../../../package.json";
 
 export const metadata: Metadata = { title: "About" };
@@ -54,7 +55,7 @@ const GLOSSARY: [string, string][] = [
 ];
 
 function Guide({ title, children }: { title: string; children: React.ReactNode }) {
-  return <details className="about-guide"><summary>{title}</summary><div className="about-guide-body">{children}</div></details>;
+  return <details className="about-guide" data-about-item><summary>{title}</summary><div className="about-guide-body">{children}</div></details>;
 }
 
 export default async function AboutPage() {
@@ -83,58 +84,61 @@ export default async function AboutPage() {
       </header>
 
       <div className="about-layout">
-        <nav className="about-toc" aria-label="On this page">
-          <span className="eyebrow">On this page</span>
-          <ul>{SECTIONS.map(([id, label]) => <li key={id}><a href={`#${id}`}>{label}</a></li>)}</ul>
-        </nav>
+        <aside className="about-toc">
+          <AboutSearch />
+          <nav aria-label="On this page">
+            <span className="eyebrow">On this page</span>
+            <ul>{SECTIONS.map(([id, label]) => <li key={id} data-about-link={id}><a href={`#${id}`}>{label}</a></li>)}</ul>
+          </nav>
+        </aside>
 
-        <div className="about-body">
-          <section id="overview" className="card">
+        <div className="about-body" data-about-body>
+          <section id="overview" className="card" data-about-section>
             <h2>Overview</h2>
-            <p>Synora is one search across the places support and engineering knowledge lives: HDA tickets, Azure DevOps work items and wikis, and SharePoint and OneDrive documents. Ask about an issue the way you would ask a colleague. Synora finds what was seen before, what caused it and what fixed it, and answers with citations to the records themselves.</p>
-            <p>It is built to be trustworthy rather than merely fluent: it only uses records you are allowed to open, every claim links to its source, confidence is calculated from the evidence, and when the evidence isn&apos;t good enough it says so instead of guessing.</p>
+            <p data-about-item>Synora is one search across the places support and engineering knowledge lives: HDA tickets, Azure DevOps work items and wikis, and SharePoint and OneDrive documents. Ask about an issue the way you would ask a colleague. Synora finds what was seen before, what caused it and what fixed it, and answers with citations to the records themselves.</p>
+            <p data-about-item>It is built to be trustworthy rather than merely fluent: it only uses records you are allowed to open, every claim links to its source, confidence is calculated from the evidence, and when the evidence isn&apos;t good enough it says so instead of guessing.</p>
           </section>
 
-          <section id="features">
+          <section id="features" data-about-section>
             <h2 className="about-h2">Features</h2>
             <div className="a-grid">{FEATURES.map(([icon, title, text]) => (
-              <article key={title} className="card about-feature"><Icon name={icon} size={20} /><h3>{title}</h3><p className="small muted">{text}</p></article>
+              <article key={title} className="card about-feature" data-about-item><Icon name={icon} size={20} /><h3>{title}</h3><p className="small muted">{text}</p></article>
             ))}</div>
           </section>
 
-          <section id="sources" className="card">
+          <section id="sources" className="card" data-about-section>
             <h2>Connected sources</h2>
             <p className="small muted">Live from this installation.{isAdmin ? <> Manage them on <Link href="/sources">Sources</Link>.</> : null}</p>
             <div className="table-wrap"><table className="table">
               <thead><tr><th>Source</th><th>Space</th><th>Status</th><th className="r">Records</th><th>Last sync</th></tr></thead>
               <tbody>{connectors.map((c) => (
-                <tr key={c.id}><td>{c.name}</td><td>{c.space.name}</td><td><StatusPill status={c.status} /></td><td className="r num">{c.recordCount.toLocaleString("en-GB")}</td>
+                <tr key={c.id} data-about-item><td>{c.name}</td><td>{c.space.name}</td><td><StatusPill status={c.status} /></td><td className="r num">{c.recordCount.toLocaleString("en-GB")}</td>
                   <td>{c.lastSyncAt ? c.lastSyncAt.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "Never"}</td></tr>
               ))}</tbody>
             </table></div>
           </section>
 
-          <section id="answers" className="card">
+          <section id="answers" className="card" data-about-section>
             <h2>How answers work</h2>
             <ol className="about-steps">
-              <li><b>Understand the question.</b> References (ticket numbers, WI-123), error codes and application names are recognized without AI.</li>
-              <li><b>Find evidence.</b> Hybrid search combines meaning (vector similarity) and keywords, filtered inside the database to records you may open.</li>
-              <li><b>Check there is enough.</b> With too little authorized evidence, no AI is called and you are told so.</li>
-              <li><b>Write the answer.</b> The model gets only the evidence passages and must cite them, in a strict format.</li>
-              <li><b>Check the citations.</b> Citations that weren&apos;t in the evidence are dropped; a sentence left without one is removed.</li>
-              <li><b>Calculate confidence and warnings.</b> From the evidence: agreement, approved knowledge, confirmed root causes, fixes that were only temporary, age.</li>
+              <li data-about-item><b>Understand the question.</b> References (ticket numbers, WI-123), error codes and application names are recognized without AI.</li>
+              <li data-about-item><b>Find evidence.</b> Hybrid search combines meaning (vector similarity) and keywords, filtered inside the database to records you may open.</li>
+              <li data-about-item><b>Check there is enough.</b> With too little authorized evidence, no AI is called and you are told so.</li>
+              <li data-about-item><b>Write the answer.</b> The model gets only the evidence passages and must cite them, in a strict format.</li>
+              <li data-about-item><b>Check the citations.</b> Citations that weren&apos;t in the evidence are dropped; a sentence left without one is removed.</li>
+              <li data-about-item><b>Calculate confidence and warnings.</b> From the evidence: agreement, approved knowledge, confirmed root causes, fixes that were only temporary, age.</li>
             </ol>
             <span className="eyebrow">Evidence types you will see</span>
             <dl className="rd-dl">
-              <dt><KindBadge kind="approved" /></dt><dd>Reviewed guidance: knowledge articles, and SharePoint folders or wiki paths marked as approved.</dd>
-              <dt><KindBadge kind="historical" /></dt><dd>Solved HDA tickets. What worked before, not yet approved as reusable knowledge.</dd>
-              <dt><KindBadge kind="dev_work" /></dt><dd>Azure DevOps work items. Findings may change as work progresses.</dd>
-              <dt><KindBadge kind="reference" /></dt><dd>Documentation: SharePoint and OneDrive files, wiki pages. Check it is still current.</dd>
-              <dt><KindBadge kind="discussion" /></dt><dd>Email or chat. Statements here have not been validated.</dd>
+              <div className="about-row" data-about-item><dt><KindBadge kind="approved" /></dt><dd>Reviewed guidance: knowledge articles, and SharePoint folders or wiki paths marked as approved.</dd></div>
+              <div className="about-row" data-about-item><dt><KindBadge kind="historical" /></dt><dd>Solved HDA tickets. What worked before, not yet approved as reusable knowledge.</dd></div>
+              <div className="about-row" data-about-item><dt><KindBadge kind="dev_work" /></dt><dd>Azure DevOps work items. Findings may change as work progresses.</dd></div>
+              <div className="about-row" data-about-item><dt><KindBadge kind="reference" /></dt><dd>Documentation: SharePoint and OneDrive files, wiki pages. Check it is still current.</dd></div>
+              <div className="about-row" data-about-item><dt><KindBadge kind="discussion" /></dt><dd>Email or chat. Statements here have not been validated.</dd></div>
             </dl>
           </section>
 
-          <section id="guides" className="card">
+          <section id="guides" className="card" data-about-section>
             <h2>Help guides</h2>
             <Guide title="Ask a good question">
               <p>Describe what you see, not what you think the cause is: the application, the symptom, any error text, where and since when. For example: &quot;Rx.NET printing jobs stuck in AWAITING PRINT at the Labex site since this morning&quot;.</p>
@@ -162,7 +166,7 @@ export default async function AboutPage() {
             </Guide>
           </section>
 
-          <section id="admin" className="card">
+          <section id="admin" className="card" data-about-section>
             <h2>For administrators</h2>
             <Guide title="Start and stop Synora">
               <p>Double-click <b>Start Synora</b> to start Docker, the database, the web app and the sync worker; <b>Stop Synora</b> stops them and keeps all data. Syncs that were interrupted continue from where they stopped after the next start. Run only one sync worker at a time.</p>
@@ -184,43 +188,43 @@ export default async function AboutPage() {
             </Guide>
           </section>
 
-          <section id="troubleshooting" className="card">
+          <section id="troubleshooting" className="card" data-about-section>
             <h2>Troubleshooting</h2>
             <dl className="rd-dl about-dl">
-              <dt>&quot;Synora found evidence but could not write an answer&quot;</dt><dd>The AI gateway failed. Check <code>OPENAI_API_KEY</code> and the gateway; the supporting records are still shown.</dd>
-              <dt>HDA: &quot;could not be reached&quot;</dt><dd>Connect to the company VPN; HDA is only reachable on the corporate network.</dd>
-              <dt>HDA: &quot;answered with an error page&quot;</dt><dd>HDA QA is briefly unavailable. The sync retries and the next run continues where it stopped.</dd>
-              <dt>A source stays on &quot;Syncing&quot;</dt><dd>Check the sync worker window is open (or start Synora again). Interrupted syncs resume within a few minutes.</dd>
-              <dt>Azure DevOps: &quot;refused&quot;</dt><dd>The token expired or lacks a scope; create a new one with Work Items (Read) and Wiki (Read).</dd>
-              <dt>SharePoint: &quot;sign-in has expired&quot;</dt><dd>Choose <b>Sign in to Microsoft 365</b> on the card again.</dd>
-              <dt>A record you expect is missing</dt><dd>Check its source is connected and synced, the HDA owner group or SharePoint folder is chosen, and the space isn&apos;t restricted for you.</dd>
+              <div className="about-row" data-about-item><dt>&quot;Synora found evidence but could not write an answer&quot;</dt><dd>The AI gateway failed. Check <code>OPENAI_API_KEY</code> and the gateway; the supporting records are still shown.</dd></div>
+              <div className="about-row" data-about-item><dt>HDA: &quot;could not be reached&quot;</dt><dd>Connect to the company VPN; HDA is only reachable on the corporate network.</dd></div>
+              <div className="about-row" data-about-item><dt>HDA: &quot;answered with an error page&quot;</dt><dd>HDA QA is briefly unavailable. The sync retries and the next run continues where it stopped.</dd></div>
+              <div className="about-row" data-about-item><dt>A source stays on &quot;Syncing&quot;</dt><dd>Check the sync worker window is open (or start Synora again). Interrupted syncs resume within a few minutes.</dd></div>
+              <div className="about-row" data-about-item><dt>Azure DevOps: &quot;refused&quot;</dt><dd>The token expired or lacks a scope; create a new one with Work Items (Read) and Wiki (Read).</dd></div>
+              <div className="about-row" data-about-item><dt>SharePoint: &quot;sign-in has expired&quot;</dt><dd>Choose <b>Sign in to Microsoft 365</b> on the card again.</dd></div>
+              <div className="about-row" data-about-item><dt>A record you expect is missing</dt><dd>Check its source is connected and synced, the HDA owner group or SharePoint folder is chosen, and the space isn&apos;t restricted for you.</dd></div>
             </dl>
           </section>
 
-          <section id="privacy" className="card">
+          <section id="privacy" className="card" data-about-section>
             <h2>Privacy & security</h2>
             <ul className="about-list">
-              <li><Icon name="lock" size={16} /><span>Permissions are applied inside the database query, before anything reaches you or the AI.</span></li>
-              <li><Icon name="shield" size={16} /><span>Sensitive HDA ticket types (security incidents, IP violations, report leaks) are never copied into Synora.</span></li>
-              <li><Icon name="users" size={16} /><span>People&apos;s names (assignees, contacts, authors) are shown in the record panel only; they are never part of the searchable text or sent to the AI.</span></li>
-              <li><Icon name="cpu" size={16} /><span>Embeddings and image text recognition run on the Synora server, so indexing sends no content outside.</span></li>
-              <li><Icon name="sparkles" size={16} /><span>AI runs only through the company gateway, with <code>store:false</code>, allow-listed hosts and a data-processing approval reference.</span></li>
-              <li><Icon name="link" size={16} /><span>All source access is read-only. Tokens and passwords stay in <code>.env</code> or are stored encrypted, and are never shown in the app.</span></li>
+              <li data-about-item><Icon name="lock" size={16} /><span>Permissions are applied inside the database query, before anything reaches you or the AI.</span></li>
+              <li data-about-item><Icon name="shield" size={16} /><span>Sensitive HDA ticket types (security incidents, IP violations, report leaks) are never copied into Synora.</span></li>
+              <li data-about-item><Icon name="users" size={16} /><span>People&apos;s names (assignees, contacts, authors) are shown in the record panel only; they are never part of the searchable text or sent to the AI.</span></li>
+              <li data-about-item><Icon name="cpu" size={16} /><span>Embeddings and image text recognition run on the Synora server, so indexing sends no content outside.</span></li>
+              <li data-about-item><Icon name="sparkles" size={16} /><span>AI runs only through the company gateway, with <code>store:false</code>, allow-listed hosts and a data-processing approval reference.</span></li>
+              <li data-about-item><Icon name="link" size={16} /><span>All source access is read-only. Tokens and passwords stay in <code>.env</code> or are stored encrypted, and are never shown in the app.</span></li>
             </ul>
           </section>
 
-          <section id="stack" className="card">
+          <section id="stack" className="card" data-about-section>
             <h2>Tech stack</h2>
             <div className="table-wrap"><table className="table">
               <thead><tr><th>Area</th><th>Technology</th><th>Version</th></tr></thead>
-              <tbody>{STACK.map(([area, tech, p]) => <tr key={area}><td><b>{area}</b></td><td>{tech}</td><td className="mono small">{version(p) || "—"}</td></tr>)}</tbody>
+              <tbody>{STACK.map(([area, tech, p]) => <tr key={area} data-about-item><td><b>{area}</b></td><td>{tech}</td><td className="mono small">{version(p) || "—"}</td></tr>)}</tbody>
             </table></div>
             <p className="small muted">Pipeline: connector → change check, chunking, local embeddings, permissions → PostgreSQL + pgvector. Question → hybrid retrieval with the permission filter in SQL → evidence check → answer → citation check → streamed to the page.</p>
           </section>
 
-          <section id="glossary" className="card">
+          <section id="glossary" className="card" data-about-section>
             <h2>Glossary</h2>
-            <dl className="rd-dl about-dl">{GLOSSARY.map(([t, d]) => <div key={t} style={{ display: "contents" }}><dt>{t}</dt><dd>{d}</dd></div>)}</dl>
+            <dl className="rd-dl about-dl">{GLOSSARY.map(([t, d]) => <div key={t} className="about-row" data-about-item><dt>{t}</dt><dd>{d}</dd></div>)}</dl>
           </section>
         </div>
       </div>

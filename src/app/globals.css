@@ -730,3 +730,10 @@ a.admin-link { text-decoration: none; }
   .about-toc ul { flex-direction: row; flex-wrap: wrap; }
   .about-dl { grid-template-columns: 1fr; }
 }
+.about-toc { display: flex; flex-direction: column; gap: 18px; }
+.about-search { display: grid; gap: 6px; }
+.about-search-box { position: relative; }
+.about-search-box svg { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.about-search-box .input { padding-left: 30px; }
+.about-row { display: contents; }
+::highlight(about-search) { background: color-mix(in srgb, var(--warn) 35%, transparent); color: inherit; }
