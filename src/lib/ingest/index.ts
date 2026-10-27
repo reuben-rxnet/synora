@@ -93,7 +93,9 @@ async function indexChunks(changed: { id: string; item: SourceItem }[]) {
 async function linkRecords(changed: { id: string; item: SourceItem }[]) {
   for (const { id, item } of changed) {
     for (const l of item.links ?? []) {
-      const target = await db.sourceRecord.findFirst({ where: { ref: l.ref, deletedAt: null }, select: { id: true } });
+      // "WI-<id>" (an Azure DevOps work item named by number, from links and #mentions) resolves by its id, whatever its type code.
+      const wi = /^WI-(\d+)$/.exec(l.ref)?.[1];
+      const target = await db.sourceRecord.findFirst({ where: wi ? { sourceSystem: "Azure DevOps", externalId: wi, deletedAt: null } : { ref: l.ref, deletedAt: null }, select: { id: true } });
       if (target && target.id !== id) {
         await db.recordLink.upsert({ where: { fromId_toId_kind: { fromId: id, toId: target.id, kind: l.kind } }, update: {}, create: { fromId: id, toId: target.id, kind: l.kind } });
       }

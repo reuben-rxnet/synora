@@ -1,5 +1,5 @@
 {
-  "_readme": "Azure DevOps mapping for Synora. Every field Azure DevOps reports for a work item is mapped: text, path and pick-list fields join the searchable text, dates and numbers are shown in the record panel, and identity fields (people) are shown by display name only, never searchable or sent to the AI. `textFields` form the main content, in this order. `skipFields` / `skipFieldPrefixes` drop bookkeeping fields. Comments are added as a Discussion section without author names. `wiki`: the project wikis are indexed as documents; pages under `approvedPaths` (e.g. \"/Runbooks\") count as approved knowledge in answers, all other pages as reference documents. New pages are read at the next sync; known pages are re-checked every `refreshHours`, at most `maxRefreshPerSync` per sync.",
+  "_readme": "Azure DevOps mapping for Synora. Every field Azure DevOps reports for a work item is mapped: text, path and pick-list fields join the searchable text, dates and numbers are shown in the record panel, and identity fields (people) are shown by display name only, never searchable or sent to the AI. `textFields` form the main content, in this order. `skipFields` / `skipFieldPrefixes` drop bookkeeping fields. Comments are added as a Discussion section without author names. `wiki`: the project wikis are indexed as documents; pages under `approvedPaths` (e.g. \"/Runbooks\") count as approved knowledge in answers, all other pages as reference documents. New pages are read at the next sync; known pages are re-checked every `refreshHours`, at most `maxRefreshPerSync` per sync. `refPrefixes`: the reference Synora shows for a work item is the type's code and its number (User Story 207077 → US_207077), the format the teams use in titles; types not listed get their initials.",
   "initialLookbackDays": 730,
   "pageSize": 200,
   "requestDelayMs": 200,
@@ -10,6 +10,30 @@
   "excludeWorkItemTypes": [],
   "recordTypes": {
     "Bug": "bug"
+  },
+  "refPrefixes": {
+    "Support Request": "SR",
+    "Task": "T",
+    "User Story": "US",
+    "Production Issue": "PI",
+    "Bug": "B",
+    "Feature": "F",
+    "Epic": "E",
+    "Defect": "D",
+    "Observation": "O",
+    "Test Case": "TC",
+    "Test Suite": "TS",
+    "Test Plan": "TP",
+    "Change Request": "CR",
+    "Shared Steps": "SS",
+    "Project Task": "PT",
+    "Code Review Request": "CRQ",
+    "Code Review Response": "CRS",
+    "Issue": "I",
+    "Impediment": "IMP",
+    "Monitoring": "MON",
+    "Performance": "PERF",
+    "Order launch": "OL"
   },
   "textFields": [
     {

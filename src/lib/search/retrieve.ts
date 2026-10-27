@@ -4,7 +4,7 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { embedder, toVector } from "@/lib/ai/embeddings";
-import { tsQuery, type ParsedQuery } from "./query";
+import { tsQuery, workItemIds, type ParsedQuery } from "./query";
 
 export interface SearchFilters {
   spaces?: string[];
@@ -62,7 +62,8 @@ export async function retrieve(q: ParsedQuery, principals: string[], filters: Se
     ORDER BY rank DESC LIMIT ${CANDIDATES}` : [];
 
   const refRows = q.refs.length ? await db.$queryRaw<{ recordId: string; chunkId: string | null }[]>`
-    SELECT r.id AS "recordId", (SELECT c.id FROM "Chunk" c WHERE c."recordId" = r.id ORDER BY c.ordinal LIMIT 1) AS "chunkId" FROM "SourceRecord" r WHERE ${where} AND r.acl && ${principals}::text[] AND upper(r.ref) = ANY(${q.refs}::text[])` : [];
+    SELECT r.id AS "recordId", (SELECT c.id FROM "Chunk" c WHERE c."recordId" = r.id ORDER BY c.ordinal LIMIT 1) AS "chunkId" FROM "SourceRecord" r WHERE ${where} AND r.acl && ${principals}::text[]
+      AND (upper(r.ref) = ANY(${q.refs}::text[]) OR (r."sourceSystem" = 'Azure DevOps' AND r."externalId" = ANY(${workItemIds(q.refs)}::text[])))` : [];
 
   const byRecord = new Map<string, Hit & { chunkId: string }>();
   const get = (recordId: string, chunkId: string) => {

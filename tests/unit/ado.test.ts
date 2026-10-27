@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { loadAdoMapping, markdownText, pageQuery, parseCursor, parseWikiState, toWikiPage, toWorkItem, wikiReadPlan } from "@/lib/connectors/ado/connector";
+import { parseQuery, workItemIds } from "@/lib/search/query";
+import { adoRef, loadAdoMapping, markdownText, pageQuery, parseCursor, parseWikiState, toWikiPage, toWorkItem, wikiReadPlan } from "@/lib/connectors/ado/connector";
 import type { AdoField, AdoWorkItem } from "@/lib/connectors/ado/client";
 
 const m = loadAdoMapping("config/ado-mapping.json");
@@ -28,7 +29,7 @@ describe("Azure DevOps mapping", () => {
   const item = toWorkItem(wi, m, meta, "https://dev.azure.com/ITRxSolutions/Rx.Net%20-%20Platform", [{ text: "<p>Root cause: missing validation</p>", createdDate: "2026-10-27T10:00:00Z" }]);
 
   it("maps a bug with its content, details and discussion", () => {
-    expect(item).toMatchObject({ ref: "WI-206985", recordType: "bug", status: "New", category: "Bug", module: "Rx.Net - Platform\\Lenses", priority: "2 - High", evidenceKind: "dev_work" });
+    expect(item).toMatchObject({ ref: "B_206985", recordType: "bug", status: "New", category: "Bug", module: "Rx.Net - Platform\\Lenses", priority: "2 - High", evidenceKind: "dev_work" });
     expect(item.body).toContain("Repro steps:\nScan a data matrix");
     expect(item.body).toContain("Root Cause Category: Validation");
     expect(item.body).toContain("Discussion:\n[2026-10-27] Root cause: missing validation");
@@ -92,5 +93,18 @@ describe("Azure DevOps wiki", () => {
     expect(parseWikiState(JSON.stringify({ at: "x", id: 1, wiki: { w1: { "/a": { v: "1", at: 5 } } } }))).toEqual({ w1: { "/a": { v: "1", at: 5 } } });
     expect(parseWikiState(JSON.stringify({ wiki: { w1: { "/a.md": "abc" } } }))).toEqual({ w1: { "/a.md": { v: null, at: 0 } } });
     expect(parseWikiState("2026-01-01T00:00:00Z")).toEqual({});
+  });
+});
+
+describe("Azure DevOps references", () => {
+  it("use the work item type's code and number, as the teams write them", () => {
+    expect(adoRef("User Story", 207077, m)).toBe("US_207077");
+    expect(adoRef("Support Request", 59418, m)).toBe("SR_59418");
+    expect(adoRef("Production Issue", 100200, m)).toBe("PI_100200");
+    expect(adoRef("Release Readiness Check", 5, m)).toBe("RRC_5");
+  });
+  it("are found by any form of the number", () => {
+    expect(parseQuery("why is US_207077 blocked").refs).toEqual(["US_207077"]);
+    expect(workItemIds(["US_207077", "WI-59418", "A3415102L", "SR_59418"])).toEqual(["207077", "59418"]);
   });
 });

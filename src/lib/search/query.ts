@@ -5,7 +5,11 @@ const STOP = new Set(("a an the and or of to in on for with we have has this tha
   "find me our any all about from by do does did how why when where it its as at but begin few hours work works can could should would there their " +
   "seen previous known please give list tell get got also not only into than then them they you your i my il la le les de des du et un une der die das und").split(" "));
 
-const REF = /\b(?:[A-Z]\d{6,8}[A-Z]|(?:BUG|WI|KB|INC|REQ|HR|FIN|DEV)-[A-Z0-9-]+)\b/g;
+// HDA tickets (A3415102L), Azure DevOps work items as WI-207077 or with their type code (US_207077, SR_59418), and other prefixed ids.
+const REF = /\b(?:[A-Z]\d{6,8}[A-Z]|(?:BUG|WI|KB|INC|REQ|HR|FIN|DEV)-[A-Z0-9-]+|[A-Z]{1,4}_\d{3,7})\b/g;
+
+/** Work item numbers named in references (WI-207077, US_207077…), matched by id whatever type code was typed. */
+export const workItemIds = (refs: string[]) => [...new Set(refs.map((r) => /^(?:WI-|[A-Z]{1,4}_)(\d{3,7})$/.exec(r)?.[1]).filter((x): x is string => !!x))];
 
 export interface ParsedQuery {
   text: string;

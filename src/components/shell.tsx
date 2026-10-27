@@ -144,6 +144,12 @@ interface RecordDetail {
   fields: { label: string; value: string; tier?: string; person?: boolean }[];
 }
 
+/** "Open in …" wording for a record's own system. */
+const openIn = (sourceSystem: string) => ({ "HDA Ticketing": "Open in HDA", "Azure DevOps": "Open in Azure DevOps", "Azure DevOps Wiki": "Open in Azure DevOps Wiki", SharePoint: "Open in SharePoint", OneDrive: "Open in OneDrive" } as Record<string, string>)[sourceSystem] ?? "Open original source";
+/** Readable text from Markdown-ish content (wiki pages, documents): no bold markers, headings or link syntax. */
+const readable = (t: string) => t.replace(/\*\*|__/g, "").replace(/^#{1,6}\s*/gm, "").replace(/\[([^\]]+)\]\(([^)]*)\)/g, "$1");
+const PREVIEW_CHARS = 2500;
+
 const fieldValue = (v: string) => (/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(v) ? fmtDate(v) : v);
 
 const KIND_TEXT: Record<string, string> = { approved: "Approved knowledge", historical: "Historical evidence", discussion: "Email or chat discussion", dev_work: "Development work item", reference: "Reference document" };
@@ -152,16 +158,17 @@ function RecordDrawer({ id, onClose, onOpen }: { id: string; onClose: () => void
   const { toast } = useShell();
   const [r, setR] = useState<RecordDetail | null | "missing">(null);
   const [related, setRelated] = useState(false);
+  const [full, setFull] = useState(false);
   useEffect(() => { fetch(`/api/records/${id}`).then((x) => (x.ok ? x.json() : "missing")).then(setR).catch(() => setR("missing")); }, [id]);
   const save = async (rec: RecordDetail) => {
     const res = await fetch("/api/saved", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ kind: "record", name: `${rec.ref} – ${rec.title.slice(0, 60)}`, recordId: rec.id }) });
     toast(res.ok ? "Pinned. Find it under Saved." : "Couldn't pin this record.", res.ok ? "good" : "bad");
   };
   return (
-    <Drawer title="Source preview" onClose={onClose}
+    <Drawer title="Source preview" onClose={onClose} wide={full}
       footer={r && r !== "missing" ? <>
         {r.sourceUrl && !r.demo
-          ? <a className="btn btn-primary" href={r.sourceUrl} target="_blank" rel="noreferrer"><Icon name="external" size={17} /><span>Open original source</span></a>
+          ? <a className="btn btn-primary" href={r.sourceUrl} target="_blank" rel="noreferrer"><Icon name="external" size={17} /><span>{openIn(r.sourceSystem)}</span></a>
           : <Btn icon="external" variant="primary" onClick={() => toast("This is demonstration data, so there is no original record to open.", "info")}>Open original source</Btn>}
         <Btn icon="layers" onClick={() => setRelated(!related)}>{related ? "Hide related items" : "View related items"}</Btn>
         <IconBtn icon="bookmark" label="Pin record" onClick={() => save(r)} />
@@ -169,13 +176,18 @@ function RecordDrawer({ id, onClose, onOpen }: { id: string; onClose: () => void
       {r === null && <p className="muted">Loading…</p>}
       {r === "missing" && <Callout tone="info" title="This record isn't available">It may have been removed from the source, or you don&apos;t have access to it.</Callout>}
       {r && r !== "missing" && <>
-        <div className="rd-head"><SourceIcon source={r.sourceSystem} size={18} /><div className="min0"><h3 className="rd-title">{r.title}</h3><p className="muted small">{r.sourceSystem} · {typeText(r.recordType)} · <span className="mono">{r.ref}</span></p></div></div>
+        <div className="rd-head"><SourceIcon source={r.sourceSystem} size={18} /><div className="min0"><h3 className="rd-title">{r.title}</h3><p className="muted small">{r.sourceSystem} · {typeText(r.recordType)} · <span className="mono">{r.ref}</span></p>
+          {r.sourceUrl && !r.demo && <a className="link-btn" href={r.sourceUrl} target="_blank" rel="noreferrer">{openIn(r.sourceSystem)} <Icon name="external" size={13} /></a>}</div></div>
         <div className="row-wrap tight"><KindBadge kind={r.evidenceKind} />{r.status && <StatusPill status={r.status} />}<Badge tone="neutral" icon="layers">{r.space}</Badge>{r.sensitivity === "restricted" && <Badge tone="warn" icon="lock">Restricted</Badge>}{r.demo && <DemoTag />}</div>
         {r.evidenceKind === "historical" && <Callout tone="info">This resolution is historical and has not been approved as reusable knowledge.</Callout>}
         {r.evidenceKind === "discussion" && <Callout tone="info">Discussion content. Statements here have not been validated.</Callout>}
         {r.evidenceKind === "dev_work" && <Callout tone="info">Development work item. Findings may change as work progresses.</Callout>}
         {r.evidenceKind === "reference" && <Callout tone="info">Reference document. Check it is still current before relying on it.</Callout>}
-        <div className="excerpt"><span className="eyebrow">Content</span><blockquote style={{ whiteSpace: "pre-wrap" }}>{r.body.slice(0, 2500)}{r.body.length > 2500 ? "…" : ""}</blockquote></div>
+        <div className="excerpt">
+          <span className="eyebrow">Content</span>
+          <blockquote style={{ whiteSpace: "pre-wrap" }}>{readable(full ? r.body : r.body.slice(0, PREVIEW_CHARS))}{!full && r.body.length > PREVIEW_CHARS ? "…" : ""}</blockquote>
+          {r.body.length > PREVIEW_CHARS && <button type="button" className="link-btn" onClick={() => setFull(!full)}>{full ? "Show less" : `Show full content (${Math.ceil(r.body.length / 1000)}k characters)`}</button>}
+        </div>
         <dl className="rd-dl">
           <dt>Source system</dt><dd>{r.sourceSystem}</dd>
           <dt>Record type</dt><dd>{typeText(r.recordType)}</dd>

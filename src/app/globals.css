@@ -245,7 +245,7 @@ fieldset { border: 0; padding: 0; margin: 0; }
 .overlay-drawer { place-items: stretch end; padding: 0; }
 .drawer { background: var(--surface); width: min(460px, 100vw); height: 100%; display: flex; flex-direction: column; box-shadow: var(--shadow-lg); animation: slide .2s ease-out; padding-top: env(safe-area-inset-top, 0px); }
 .drawer-wide { width: min(760px, 100vw); }
-.drawer-body { flex: 1; overflow-y: auto; padding: 0 20px 20px; display: flex; flex-direction: column; gap: 14px; }
+.drawer-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 20px 20px; display: flex; flex-direction: column; gap: 14px; }
 .sheet-grip { display: none; }
 @media (max-width: 720px) {
   .overlay-drawer { place-items: end stretch; }

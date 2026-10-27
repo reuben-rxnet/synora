@@ -18,7 +18,7 @@ import { AdoClient, AdoError, type AdoField, type AdoOptions, type AdoWiki, type
 
 export interface AdoMapping {
   initialLookbackDays: number; pageSize: number; requestDelayMs: number; fetchComments: boolean; maxCommentsPerItem: number; maxBodyChars: number;
-  workItemTypes: string[]; excludeWorkItemTypes: string[]; recordTypes: Record<string, SourceItem["recordType"]>;
+  workItemTypes: string[]; excludeWorkItemTypes: string[]; recordTypes: Record<string, SourceItem["recordType"]>; refPrefixes: Record<string, string>;
   textFields: { field: string; label: string }[]; core: Record<string, string>; skipFields: string[]; skipFieldPrefixes: string[]; hdaRefPattern: string;
   /** approvedPaths: page paths (and everything below) whose pages count as approved knowledge in answers. */
   wiki: { enabled: boolean; approvedPaths: string[]; skipPaths: string[]; maxPages: number; batchSize: number; refreshHours: number; maxRefreshPerSync: number };
@@ -76,6 +76,16 @@ const LINK_KINDS: Record<string, "parent" | "linked" | "duplicate"> = {
   "System.LinkTypes.Duplicate-Forward": "duplicate", "System.LinkTypes.Duplicate-Reverse": "duplicate", "System.LinkTypes.Dependency-Forward": "linked", "System.LinkTypes.Dependency-Reverse": "linked",
 };
 
+/**
+ * The reference people use for a work item: its type's code and number (User Story 207077 → US_207077), as the
+ * teams write it in titles. The code comes from the type, not the title, because title prefixes are often copied
+ * from another item. Types without a configured code get their initials.
+ */
+export function adoRef(type: string, id: number | string, m: Pick<AdoMapping, "refPrefixes">): string {
+  const code = m.refPrefixes?.[type] ?? type.split(/\s+/).map((w) => w[0] ?? "").join("").toUpperCase();
+  return `${code || "WI"}_${id}`;
+}
+
 /** Maps one work item (and its comments) to a Synora item. Exported for tests. */
 export function toWorkItem(wi: AdoWorkItem, m: AdoMapping, fieldMeta: Map<string, AdoField>, projectUrl: string, comments: { text: string; createdDate: string }[] = []): SourceItem {
   const f = wi.fields;
@@ -119,7 +129,7 @@ export function toWorkItem(wi: AdoWorkItem, m: AdoMapping, fieldMeta: Map<string
   const priority = core("priority");
 
   return {
-    externalId: String(wi.id), ref: `WI-${wi.id}`, sourceSystem: "Azure DevOps", recordType: m.recordTypes[type] ?? "work_item",
+    externalId: String(wi.id), ref: adoRef(type, wi.id, m), sourceSystem: "Azure DevOps", recordType: m.recordTypes[type] ?? "work_item",
     title: core("title") ?? `${type} ${wi.id}`, body, evidenceKind: "dev_work", approval: "not_reviewed",
     category: type, module: core("area"), environment: core("iteration"), status: core("state"),
     priority: severity ?? (priority ? `Priority ${priority}` : null),
