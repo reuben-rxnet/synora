@@ -381,6 +381,7 @@ fieldset { border: 0; padding: 0; margin: 0; }
 .cite:hover { background: var(--surface-2); }
 .cite.k-historical { color: var(--info); border-color: color-mix(in srgb, var(--info) 40%, transparent); }
 .cite.k-approved { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, transparent); }
+.cite.k-reference { color: var(--fg-2); border-color: var(--line-strong); }
 .cite.k-devwork { color: var(--violet); border-color: color-mix(in srgb, var(--violet) 40%, transparent); }
 .cite.k-email { color: var(--fg-2); border-color: var(--line-strong); }
 .steps { margin: 0; padding: 0; list-style: none; counter-reset: s; display: flex; flex-direction: column; gap: 2px; }

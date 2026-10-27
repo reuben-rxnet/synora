@@ -77,10 +77,10 @@ describe("Azure DevOps wiki", () => {
   });
   it("maps a page to a document, approved only under the approved paths", () => {
     const item = toWikiPage(wiki, page, "Restart the picking service. Seen in A3415102L and #206985.", m, "\"v1\"");
-    expect(item).toMatchObject({ title: "Lens Picking", recordType: "document", evidenceKind: "dev_work", module: "Runbooks", sourceSystem: "Azure DevOps Wiki", sourceUrl: page.remoteUrl });
+    expect(item).toMatchObject({ title: "Lens Picking", recordType: "document", evidenceKind: "reference", module: "Runbooks", sourceSystem: "Azure DevOps Wiki", sourceUrl: page.remoteUrl });
     expect(item.links).toEqual([{ ref: "A3415102L", kind: "mentions" }, { ref: "WI-206985", kind: "mentions" }]);
     expect(toWikiPage(wiki, page, "x", { ...m, wiki: { ...m.wiki, approvedPaths: ["/Runbooks"] } }).evidenceKind).toBe("approved");
-    expect(toWikiPage(wiki, { path: "/Runbooks-old/x" }, "x", { ...m, wiki: { ...m.wiki, approvedPaths: ["/Runbooks"] } }).evidenceKind).toBe("dev_work");
+    expect(toWikiPage(wiki, { path: "/Runbooks-old/x" }, "x", { ...m, wiki: { ...m.wiki, approvedPaths: ["/Runbooks"] } }).evidenceKind).toBe("reference");
   });
   it("reads new pages first, then re-checks the longest-unchecked pages that are due, capped", () => {
     const now = Date.now();

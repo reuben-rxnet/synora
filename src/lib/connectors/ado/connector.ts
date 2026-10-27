@@ -156,7 +156,7 @@ export function toWikiPage(w: AdoWiki, page: AdoWikiPage, markdown: string, m: A
   return {
     externalId: wikiPageId(w, path), ref: `${w.name}${path}`.slice(0, 200), sourceSystem: "Azure DevOps Wiki", recordType: "document",
     title, body: body.length > m.maxBodyChars ? `${body.slice(0, m.maxBodyChars)}…` : body,
-    evidenceKind: approved ? "approved" : "dev_work", approval: approved ? "approved" : "not_reviewed",
+    evidenceKind: approved ? "approved" : "reference", approval: approved ? "approved" : "not_reviewed",
     category: "Wiki page", module: path.split("/").filter(Boolean).slice(0, -1).join("/") || null, sensitivity: "internal", acl: [],
     sourceUrl: page.remoteUrl ?? `${w.remoteUrl}?pagePath=${encodeURIComponent(path)}`,
     links: [...hdaRefs.map((ref) => ({ ref, kind: "mentions" as const })), ...workItems.map((n) => ({ ref: `WI-${n}`, kind: "mentions" as const }))],

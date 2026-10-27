@@ -173,6 +173,7 @@ export function composeWithoutAi(_question: string, evidence: Evidence[], invest
       const cause = e.rootCause.replace(/^(suspected|not confirmed|discussed)[^a-z]*/i, "").replace(/^(not confirmed|discussed)[.,]?\s*/i, "").replace(/engineer note:\s*/i, "").replace(/["“”]/g, "").replace(/\.$/, "").trim();
       if (cause.length >= 12 && !/^(not confirmed|discussed)/i.test(cause)) steps.push({ title: `Check the suspected cause: ${cause}.`, detail: `Suspected in ${e.ref}, not confirmed.`, citations: [e.id] });
     }
+    else if (e.evidenceKind === "reference" && e.resolution) steps.push({ title: firstSentences(e.resolution, 1), detail: `From the reference document ${e.ref}.`, citations: [e.id] });
     else if (e.evidenceKind === "dev_work") steps.push({ title: `Follow ${e.ref}: ${e.title}.`, detail: e.status ? `Status: ${e.status}.` : "", citations: [e.id] });
   }
   steps.sort((a, b) => Number(b.detail.startsWith("Approved")) - Number(a.detail.startsWith("Approved")));

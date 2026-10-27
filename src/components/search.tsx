@@ -243,7 +243,7 @@ function SearchBox({ inputRef, query, setQuery, mode, setMode, onSubmit, compact
   );
 }
 
-const EVIDENCE_LABEL: Record<string, string> = { approved: "Approved knowledge", historical: "Historical records", discussion: "Discussions", dev_work: "Development work" };
+const EVIDENCE_LABEL: Record<string, string> = { approved: "Approved knowledge", historical: "Historical records", discussion: "Discussions", dev_work: "Development work", reference: "Reference documents" };
 const RECORD_TYPES = ["incident", "request", "bug", "work_item", "document", "knowledge_article", "email", "chat"];
 
 function FilterDrawer({ filters, setFilters, sourceSystems, onClose }: { filters: Filters; setFilters: (f: Filters) => void; sourceSystems: { name: string; count: number }[]; onClose: () => void }) {

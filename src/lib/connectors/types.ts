@@ -2,7 +2,8 @@
 // (normalising, change detection, chunking, embedding, permissions) the same way for all of them.
 
 export type RecordType = "incident" | "request" | "problem" | "bug" | "work_item" | "document" | "email" | "chat" | "knowledge_article";
-export type EvidenceKind = "approved" | "historical" | "discussion" | "dev_work";
+/** reference: documentation (SharePoint files, wiki pages) that informs an answer but hasn't been approved as knowledge. */
+export type EvidenceKind = "approved" | "historical" | "discussion" | "dev_work" | "reference";
 export type Sensitivity = "public" | "internal" | "confidential" | "restricted";
 
 /** One item as a connector delivers it, already mapped to Synora fields. */

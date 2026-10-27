@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { assertPermission, requireSession } from "@/lib/auth/session";
 import { CONNECTOR_CATALOG } from "@/lib/connectors/registry";
 import { adoConnectorRow } from "@/lib/connectors/ado/connector";
+import { m365ConnectorRow } from "@/lib/connectors/m365/connector";
 import { handle, RequestError } from "@/server/http";
 
 export const dynamic = "force-dynamic";
@@ -23,16 +24,16 @@ export const GET = handle(async () => {
   });
 });
 
-/** Adds a connector of a type that can be set up from the Sources page (Azure DevOps). One per type for now. */
+/** Adds a connector of a type that can be set up from the Sources page (Azure DevOps, SharePoint & OneDrive). One per type for now. */
 export const POST = handle(async (req: Request) => {
   const session = await requireSession();
   assertPermission(session, "connectors.manage");
   const { type } = ((await req.json().catch(() => ({}))) ?? {}) as { type?: string };
-  if (type !== "ado") throw new RequestError("This source type can't be added from here yet.");
-  if (await db.connector.findFirst({ where: { type } })) throw new RequestError("Azure DevOps is already in the list of sources.");
-  const space = await db.space.findUnique({ where: { key: "development" } });
-  if (!space) throw new RequestError("The Development space is missing. Run npm run db:seed.", 409);
-  const c = await db.connector.create({ data: adoConnectorRow(space.id) });
+  if (type !== "ado" && type !== "m365") throw new RequestError("This source type can't be added from here yet.");
+  if (await db.connector.findFirst({ where: { type } })) throw new RequestError(`${type === "ado" ? "Azure DevOps" : "SharePoint & OneDrive"} is already in the list of sources.`);
+  const space = await db.space.findUnique({ where: { key: type === "ado" ? "development" : "it-support" } });
+  if (!space) throw new RequestError("The space for this source is missing. Run npm run db:seed.", 409);
+  const c = await db.connector.create({ data: type === "ado" ? adoConnectorRow(space.id) : m365ConnectorRow(space.id) });
   await db.auditEvent.create({ data: { actorId: session.user.id, action: "connector.create", target: c.name, detail: { connectorId: c.id, type } } });
   return NextResponse.json({ ok: true, id: c.id });
 });

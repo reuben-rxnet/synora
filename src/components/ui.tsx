@@ -81,7 +81,7 @@ export function Icon({ name, size = 18, className = '', label }: any) {
 }
 
 export function SourceIcon({ source, size = 18 }: any) {
-  const map: Record<string, string> = { 'HDA Ticketing': 'ticket', hda: 'ticket', 'Azure DevOps': 'bug', ado: 'bug', SharePoint: 'layers', sharepoint: 'layers', OneDrive: 'folder', onedrive: 'folder', Outlook: 'mail', outlook: 'mail', Teams: 'chat', teams: 'chat', Confluence: 'book', confluence: 'book', 'Knowledge base': 'book', sql: 'database', rest: 'code', mcp: 'cpu' };
+  const map: Record<string, string> = { 'HDA Ticketing': 'ticket', hda: 'ticket', 'Azure DevOps': 'bug', ado: 'bug', SharePoint: 'layers', sharepoint: 'layers', m365: 'layers', OneDrive: 'folder', onedrive: 'folder', 'Azure DevOps Wiki': 'book', Outlook: 'mail', outlook: 'mail', Teams: 'chat', teams: 'chat', Confluence: 'book', confluence: 'book', 'Knowledge base': 'book', sql: 'database', rest: 'code', mcp: 'cpu' };
   const tone: Record<string, string> = { ticket: 't1', bug: 't2', layers: 't3', folder: 't3', mail: 't4', chat: 't2', book: 't5', database: 't1', code: 't5', cpu: 't2' };
   const n = map[source] || 'file';
   return <span className={'src-ico ' + tone[n]} style={{ width: size + 14, height: size + 14 }}><Icon name={n} size={size} /></span>;
@@ -147,7 +147,7 @@ export function StatusPill({ status }: any) {
 
 export function KindBadge({ kind }: any) {
   const m = ({
-    approved: ['good', 'check', 'Approved knowledge'], historical: ['info', 'history', 'Historical record'], discussion: ['neutral', 'mail', 'Discussion'], dev_work: ['violet', 'code', 'Development work item'],
+    approved: ['good', 'check', 'Approved knowledge'], historical: ['info', 'history', 'Historical record'], discussion: ['neutral', 'mail', 'Discussion'], dev_work: ['violet', 'code', 'Development work item'], reference: ['neutral', 'book', 'Reference document'],
     email: ['neutral', 'mail', 'Discussion'], devwork: ['violet', 'code', 'Development work item'], ai: ['ai', 'sparkles', 'AI-generated interpretation'],
   } as Record<string, string[]>)[kind] || ['neutral', 'file', kind];
   return <Badge tone={m[0]} icon={m[1]}>{m[2]}</Badge>;

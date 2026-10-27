@@ -1,0 +1,11 @@
+{
+  "_readme": "SharePoint & OneDrive settings for Synora. Only the folders chosen on the Sources page are read (with everything below them). Each sync lists those folders and reads only files that are new or changed (by their change tag). Office files are converted to PDF by Microsoft 365 and their text read; images go through text recognition on the Synora server. Files above the size limits are listed by name only.",
+  "requestDelayMs": 150,
+  "batchSize": 10,
+  "maxFileMB": 50,
+  "maxImageMB": 15,
+  "maxFilesPerFolder": 20000,
+  "maxDepth": 25,
+  "maxBodyChars": 60000,
+  "hdaRefPattern": "\\b[A-Z]\\d{6,8}[LC]\\b"
+}

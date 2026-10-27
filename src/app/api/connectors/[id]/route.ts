@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { assertPermission, requireSession } from "@/lib/auth/session";
 import { connectorFor } from "@/lib/connectors/registry";
 import { activeGroups } from "@/lib/connectors/hda/connector";
+import { deleteCredential, forgetToken, loadCredential } from "@/lib/connectors/m365/auth";
+import { chosenFolders, folderKey } from "@/lib/connectors/m365/connector";
 import { nextRun, secretReader } from "@/lib/connectors/sync";
 import { markDeleted } from "@/lib/ingest";
 import { enqueue } from "@/lib/jobs";
@@ -15,6 +18,11 @@ const group = z.object({ id: z.string().min(1).max(40), name: z.string().max(200
 const body = z.discriminatedUnion("action", [
   z.object({ action: z.enum(["sync", "full-sync", "pause", "resume", "test"]) }),
   z.object({ action: z.literal("owner-groups"), groups: z.array(group).max(500) }),
+  z.object({ action: z.literal("folders"), folders: z.array(z.object({
+    driveId: z.string().min(1).max(200), itemId: z.string().min(1).max(200), name: z.string().max(400), path: z.string().max(2000),
+    source: z.enum(["sharepoint", "onedrive"]), approved: z.boolean().optional(),
+  })).max(200), siteUrl: z.string().max(500).optional() }),
+  z.object({ action: z.literal("m365-signout") }),
 ]);
 
 export const POST = handle(async (req: Request, ctx: RouteContext<"/api/connectors/[id]">) => {
@@ -60,6 +68,43 @@ export const POST = handle(async (req: Request, ctx: RouteContext<"/api/connecto
     if (syncNow) await enqueue("sync", { connectorId: c.id, full: true }, { dedupeKey: `sync:${c.id}` });
     await audit({ active: groups.map((g) => g.id), added: added.map((g) => g.id), removed: removed.map((g) => g.id), recordsRemoved: deleted });
     return NextResponse.json({ ok: true, active: groups, recordsRemoved: deleted, syncQueued: syncNow });
+  }
+  if (parsed.data.action === "folders") {
+    if (c.type !== "m365") throw new RequestError("Folders only apply to SharePoint & OneDrive connectors.");
+    const folders = [...new Map(parsed.data.folders.map((f) => [folderKey(f), f])).values()];
+    const before = chosenFolders(c.config as Record<string, unknown>);
+    const removed = before.filter((b) => !folders.some((f) => folderKey(f) === folderKey(b)));
+    const added = folders.filter((f) => !before.some((b) => folderKey(b) === folderKey(f)));
+    // Documents of folders that are no longer chosen leave the index right away.
+    const stale = removed.length ? await db.$queryRaw<{ externalId: string }[]>`
+      SELECT "externalId" FROM "SourceRecord" WHERE "connectorId" = ${c.id} AND "deletedAt" IS NULL AND raw->>'folderKey' = ANY(${removed.map(folderKey)}::text[])` : [];
+    const deleted = await markDeleted(c.id, stale.map((r) => r.externalId));
+    const signedIn = !!(await loadCredential(c.id));
+    // A changed "approved knowledge" setting changes how stored documents are labelled, so the files are read again.
+    const relabel = folders.some((f) => { const b = before.find((x) => folderKey(x) === folderKey(f)); return b !== undefined && !!b.approved !== !!f.approved; });
+    const syncNow = signedIn && folders.length > 0 && c.status !== "paused" && (added.length > 0 || relabel);
+    const status = c.status === "paused" ? {}
+      : !folders.length ? { status: "action_required", statusNote: "Choose at least one folder before syncing." }
+      : syncNow ? { status: "syncing", statusNote: "Queued. Reading the chosen folders." }
+      : signedIn && c.status === "action_required" ? { status: "connected", statusNote: null, nextSyncAt: nextRun(c.schedule) } : {};
+    await db.connector.update({ where: { id }, data: {
+      config: { ...(c.config as Record<string, unknown>), folders, ...(parsed.data.siteUrl !== undefined ? { siteUrl: parsed.data.siteUrl } : {}) },
+      recordCount: await db.sourceRecord.count({ where: { connectorId: c.id, deletedAt: null } }),
+      ...(relabel ? { cursor: null } : {}), ...status,
+    } });
+    if (syncNow) await enqueue("sync", { connectorId: c.id }, { dedupeKey: `sync:${c.id}` });
+    await audit({ folders: folders.map((f) => f.path), added: added.map((f) => f.path), removed: removed.map((f) => f.path), recordsRemoved: deleted });
+    return NextResponse.json({ ok: true, recordsRemoved: deleted, syncQueued: syncNow });
+  }
+  if (parsed.data.action === "m365-signout") {
+    if (c.type !== "m365") throw new RequestError("Only SharePoint & OneDrive connectors have a Microsoft 365 sign-in.");
+    await deleteCredential(c.id);
+    forgetToken(c.id);
+    const config = { ...(c.config as Record<string, unknown>) };
+    delete config.account;
+    await db.connector.update({ where: { id }, data: { config: config as Prisma.InputJsonObject, status: "not_configured", nextSyncAt: null, statusNote: "Signed out of Microsoft 365. Already indexed documents stay until removed; sign in again to keep them up to date." } });
+    await audit();
+    return NextResponse.json({ ok: true });
   }
   if (action === "pause" || action === "resume") {
     if (action === "resume" && c.status !== "paused") throw new RequestError("The connector isn't paused.");

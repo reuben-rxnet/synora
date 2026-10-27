@@ -146,7 +146,7 @@ interface RecordDetail {
 
 const fieldValue = (v: string) => (/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(v) ? fmtDate(v) : v);
 
-const KIND_TEXT: Record<string, string> = { approved: "Approved knowledge", historical: "Historical evidence", discussion: "Email or chat discussion", dev_work: "Development work item" };
+const KIND_TEXT: Record<string, string> = { approved: "Approved knowledge", historical: "Historical evidence", discussion: "Email or chat discussion", dev_work: "Development work item", reference: "Reference document" };
 
 function RecordDrawer({ id, onClose, onOpen }: { id: string; onClose: () => void; onOpen: (id: string) => void }) {
   const { toast } = useShell();
@@ -174,6 +174,7 @@ function RecordDrawer({ id, onClose, onOpen }: { id: string; onClose: () => void
         {r.evidenceKind === "historical" && <Callout tone="info">This resolution is historical and has not been approved as reusable knowledge.</Callout>}
         {r.evidenceKind === "discussion" && <Callout tone="info">Discussion content. Statements here have not been validated.</Callout>}
         {r.evidenceKind === "dev_work" && <Callout tone="info">Development work item. Findings may change as work progresses.</Callout>}
+        {r.evidenceKind === "reference" && <Callout tone="info">Reference document. Check it is still current before relying on it.</Callout>}
         <div className="excerpt"><span className="eyebrow">Content</span><blockquote style={{ whiteSpace: "pre-wrap" }}>{r.body.slice(0, 2500)}{r.body.length > 2500 ? "…" : ""}</blockquote></div>
         <dl className="rd-dl">
           <dt>Source system</dt><dd>{r.sourceSystem}</dd>
