@@ -158,7 +158,8 @@ describe("text with emoji", () => {
   });
   it("repairs stray halves anywhere in an item before it is stored", () => {
     const item = wellFormedDeep({ title: "ok", body: "cut \uDC49 here", raw: { fields: [{ value: "\uD83D" }] } });
-    expect(hasLoneSurrogate(JSON.stringify(item).replace(/\u[0-9a-f]{4}/gi, ""))).toBe(false);
+    expect(hasLoneSurrogate(item.body) || hasLoneSurrogate(item.raw.fields[0]!.value)).toBe(false);
     expect(item.body).toBe("cut � here");
+    expect(item.raw.fields[0]!.value).toBe("�");
   });
 });
