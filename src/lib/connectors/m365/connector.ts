@@ -100,6 +100,11 @@ export const m365Connector: Connector = {
   type: "m365",
   label: "SharePoint & OneDrive",
 
+  progress(cursor) {
+    const files = Object.values(parseFileState(cursor)).reduce((n, f) => n + Object.keys(f).length, 0);
+    return files ? { position: `${files.toLocaleString("en-GB")} files read in the chosen folders`, fraction: null } : null;
+  },
+
   async testConnection(ctx): Promise<TestResult> {
     try {
       const cred = await loadCredential(ctx.connectorId);

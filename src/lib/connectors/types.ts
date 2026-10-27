@@ -1,6 +1,8 @@
 // The connector SDK. Every source implements this interface; src/lib/ingest does the rest
 // (normalising, change detection, chunking, embedding, permissions) the same way for all of them.
 
+import type { SyncProgress } from "./progress";
+
 export type RecordType = "incident" | "request" | "problem" | "bug" | "work_item" | "document" | "email" | "chat" | "knowledge_article";
 /** reference: documentation (SharePoint files, wiki pages) that informs an answer but hasn't been approved as knowledge. */
 export type EvidenceKind = "approved" | "historical" | "discussion" | "dev_work" | "reference";
@@ -73,6 +75,8 @@ export interface Connector {
   fetchMemberships?(ctx: SyncContext): Promise<{ groupKey: string; groupName: string; memberLogins: string[] }[]>;
   /** Re-read memberships at most this often (full syncs always do). Unset: after every sync. */
   membershipSyncHours?: number;
+  /** How far a sync has got, from the saved cursor alone (no source calls). Shown on the Sources page. */
+  progress?(cursor: string | null): SyncProgress | null;
 }
 
 export class ConnectorError extends Error {

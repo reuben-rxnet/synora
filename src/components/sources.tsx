@@ -4,7 +4,8 @@ import { fmtDate, useShell } from "./shell";
 import { Badge, Btn, Callout, Drawer, Empty, Icon, Modal, SourceIcon, StatusPill, Tabs, fmtNum } from "./ui";
 
 interface Run { id: string; kind: string; status: string; startedAt: string; finishedAt: string | null; added: number; updated: number; unchanged: number; deleted: number; failed: number; errorText: string | null }
-interface Conn { id: string; type: string; name: string; space: string; status: string; statusNote: string | null; schedule: string; ownerGroup: string; lastSyncAt: string | null; nextSyncAt: string | null; recordCount: number; config: Record<string, unknown>; secretRef: string | null; runs: Run[] }
+interface Progress { position: string | null; fraction: number | null; detail?: string; running: boolean; itemsThisRun: number; perMinute: number | null; runStartedAt: string | null }
+interface Conn { progress: Progress | null; id: string; type: string; name: string; space: string; status: string; statusNote: string | null; schedule: string; ownerGroup: string; lastSyncAt: string | null; nextSyncAt: string | null; recordCount: number; config: Record<string, unknown>; secretRef: string | null; runs: Run[] }
 interface OwnerGroup { id: string; name: string }
 interface Folder { driveId: string; itemId: string; name: string; path: string; source: "sharepoint" | "onedrive"; approved?: boolean }
 interface Catalog { type: string; name: string; category: string; description: string; available: boolean }
@@ -20,6 +21,23 @@ const M365_RESULT: Record<string, [string, "good" | "bad" | "info"]> = {
   missing: ["That connector no longer exists.", "bad"],
 };
 const ownerGroups = (c: Conn): OwnerGroup[] => (Array.isArray(c.config.ownerGroups) ? (c.config.ownerGroups as OwnerGroup[]) : []);
+/** Where a sync has got. The share is by date for sources read oldest-first, so it is labelled approximate. */
+function SyncProgressView({ p }: { p: Progress }) {
+  if (!p.running && !p.position) return null;
+  const pct = p.fraction === null ? null : Math.round(p.fraction * 100);
+  return (
+    <div className="sync-prog" aria-label="Sync progress">
+      {pct !== null && <div className="sync-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label="Share of the sync window covered"><span style={{ width: `${pct}%` }} /></div>}
+      <p className="small">
+        {p.position && <b>{p.position}</b>}{pct !== null && <span className="muted"> · about {pct}% of the window{p.running ? "" : " at the last sync"}</span>}
+        {p.detail && <><br /><span className="muted">{p.detail}</span></>}
+        {p.running && <><br /><span className="muted">{p.itemsThisRun.toLocaleString("en-GB")} items processed in this run{p.perMinute ? ` · about ${p.perMinute.toLocaleString("en-GB")} per minute` : ""}</span></>}
+      </p>
+      {pct !== null && p.running && <p className="tiny muted">Estimated by date: items are read oldest first, so the share is of the time window, not of the item count.</p>}
+    </div>
+  );
+}
+
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "Never");
 
 export function SourcesClient() {
@@ -83,6 +101,7 @@ export function SourcesClient() {
           <article key={c.id} className={"conn-card cs-" + c.status.replace(/_/g, "-")}>
             <div className="conn-top"><SourceIcon source={c.type} size={18} /><div className="grow min0"><h3 className="conn-name">{c.name}</h3><p className="muted small">{c.space} space · {SCHEDULE[c.schedule] ?? c.schedule}</p></div></div>
             <div className="conn-status"><StatusPill status={c.status} />{c.statusNote && <span className="small conn-issue">{c.statusNote}</span>}</div>
+            {c.progress?.running && <SyncProgressView p={c.progress} />}
             {test[c.id] && <Callout tone={test[c.id]!.level === "ok" ? "good" : test[c.id]!.level === "warn" ? "warn" : "bad"} title={test[c.id]!.level === "error" ? "Connection test failed" : "Connection test"}>{test[c.id]!.message}</Callout>}
             {c.type === "hda" && (
               <p className="small conn-groups">
@@ -131,6 +150,7 @@ function ConnectorDetail({ c, canManage, onFull, onClose }: { c: Conn; canManage
     <Drawer title={c.name} onClose={onClose} wide footer={canManage && c.status !== "not_configured" ? <Btn icon="refresh" onClick={onFull} disabled={c.status === "syncing"}>Run full sync</Btn> : null}>
       <div className="row-wrap tight"><StatusPill status={c.status} /><Badge tone="neutral" icon="layers">{c.space}</Badge><Badge tone="neutral">{fmtNum(c.recordCount)} records</Badge></div>
       {c.statusNote && <Callout tone={c.status === "failed" ? "bad" : "info"}>{c.statusNote}</Callout>}
+      {c.progress && <SyncProgressView p={c.progress} />}
       <Tabs label="Connector sections" value={tab} onChange={setTab} tabs={[{ value: "history", label: "Sync history", count: c.runs.length }, { value: "config", label: "Configuration" }]} />
       {tab === "history" && (c.runs.length ? (
         <div className="table-wrap"><table className="table"><thead><tr><th>Started</th><th>Type</th><th>Result</th><th className="r">Added</th><th className="r">Updated</th><th className="r">Unchanged</th><th className="r">Removed</th></tr></thead>

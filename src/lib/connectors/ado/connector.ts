@@ -13,6 +13,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ConnectorError, type ChangeBatch, type Connector, type SourceItem, type SyncContext, type TestResult } from "../types";
 import { stripHtml, toDate } from "../hda/client";
+import { datePosition } from "../progress";
 import { AdoClient, AdoError, type AdoField, type AdoOptions, type AdoWiki, type AdoWikiPage, type AdoWorkItem } from "./client";
 
 export interface AdoMapping {
@@ -211,6 +212,14 @@ const toConnectorError = (e: unknown) => {
 export const adoConnector: Connector = {
   type: "ado",
   label: "Azure DevOps",
+
+  progress(cursor) {
+    if (!cursor) return null;
+    const m = loadAdoMapping();
+    const pages = Object.values(parseWikiState(cursor)).reduce((n, w) => n + Object.keys(w).length, 0);
+    const p = datePosition("Work items changed", new Date(parseCursor(cursor, m.initialLookbackDays).at), m.initialLookbackDays);
+    return p && { ...p, detail: [p.detail, pages ? `${pages.toLocaleString("en-GB")} wiki pages read` : ""].filter(Boolean).join(" · ") };
+  },
 
   async testConnection(ctx): Promise<TestResult> {
     const m = loadAdoMapping();

@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { principal } from "@/lib/access";
 import { ConnectorError, type ChangeBatch, type Connector, type SourceItem, type SyncContext, type TestResult } from "../types";
+import { datePosition } from "../progress";
 import { HdaClient, HdaError, stripHtml, toDate, type HdaOptions, type Projection } from "./client";
 
 interface TypeRule { ids: string[]; label: string; recordType: SourceItem["recordType"]; space: string; visibility: "space" | "owner-group" | "space+owner-group"; sensitivity?: SourceItem["sensitivity"] }
@@ -218,6 +219,7 @@ export const hdaConnector: Connector = {
   type: "hda",
   label: "HDA Ticketing",
   get membershipSyncHours() { return loadMapping().membershipSyncHours; },
+  progress(cursor) { return cursor ? datePosition("Tickets solved", new Date(cursor), loadMapping().initialLookbackDays) : null; },
 
   async testConnection(ctx): Promise<TestResult> {
     const m = loadMapping();
