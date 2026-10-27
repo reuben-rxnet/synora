@@ -5,7 +5,7 @@
 //   4. Confidence is calculated from the evidence, not taken from the model.
 import { z } from "zod";
 import { callStructured } from "@/lib/ai/openai/client";
-import { loadOpenAIConfig } from "@/lib/ai/openai/config";
+import { loadOpenAIConfig, revealOpenAIKey } from "@/lib/ai/openai/config";
 import { ANSWER_PROMPT_VERSION, ANSWER_SYSTEM, INVESTIGATE_EXTRA, answerSchema } from "@/lib/ai/prompts";
 
 export interface Evidence {
@@ -121,6 +121,8 @@ export function activeProvider(): { provider: AiProvider; note: string | null } 
   try {
     const cfg = loadOpenAIConfig();
     if (!cfg.approvalRef) return { provider: "mock", note: "External AI is off until AI_DATA_PROCESSING_APPROVAL_REF is set. This answer was composed without AI." };
+    revealOpenAIKey(); // a missing key would otherwise only surface as a failed call
+
     return { provider: "openai", note: null };
   } catch (e) {
     return { provider: "mock", note: `The AI provider isn't configured (${e instanceof Error ? e.message : "unknown"}). This answer was composed without AI.` };

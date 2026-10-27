@@ -36,7 +36,11 @@ export const getSession = cache(async (): Promise<Session | null> => {
   if (!user || !user.active) return null;
 
   const roles = parseRoles(user.roles);
-  const spaces = user.spaces.map((m) => ({ id: m.space.id, key: m.space.key, name: m.space.name, role: m.role }));
+  // Every signed-in person can search every space that isn't restricted; restricted spaces (HR) need a membership.
+  // Records with their own source permissions (restricted HR cases) stay limited to those principals either way.
+  const joined = user.spaces.map((m) => ({ id: m.space.id, key: m.space.key, name: m.space.name, role: m.role }));
+  const open = await db.space.findMany({ where: { visibility: { not: "restricted" }, id: { notIn: joined.map((s) => s.id) } }, orderBy: { name: "asc" } });
+  const spaces = [...joined, ...open.map((s) => ({ id: s.id, key: s.key, name: s.name, role: "member" }))];
   const groupKeys = user.groups.map((g) => g.group.key);
   return {
     user: { id: user.id, email: user.email, displayName: user.displayName, initials: user.initials, jobTitle: user.jobTitle, department: user.department },
