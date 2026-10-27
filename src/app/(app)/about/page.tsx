@@ -3,7 +3,8 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requirePageSession } from "@/lib/auth/session";
 import { activeProvider } from "@/lib/search/answer";
-import { Badge, Icon, KindBadge, StatusPill } from "@/components/ui";
+import { Badge, Icon, KindBadge, Logo, StatusPill } from "@/components/ui";
+import { CONNECTOR_CATALOG } from "@/lib/connectors/registry";
 import { AboutSearch } from "@/components/about-search";
 import pkg from "../../../../package.json";
 
@@ -11,10 +12,22 @@ export const metadata: Metadata = { title: "About" };
 export const dynamic = "force-dynamic";
 
 const SECTIONS = [
-  ["overview", "Overview"], ["features", "Features"], ["sources", "Connected sources"], ["answers", "How answers work"],
+  ["overview", "Overview"], ["name", "Why the name Synora?"], ["principles", "Guiding principles"], ["vision", "Our vision"], ["features", "Features"], ["sources", "Connected sources"], ["answers", "How answers work"],
   ["guides", "Help guides"], ["admin", "For administrators"], ["troubleshooting", "Troubleshooting"],
   ["privacy", "Privacy & security"], ["stack", "Tech stack"], ["glossary", "Glossary"],
 ] as const;
+
+// The name is Synora's brand interpretation, not a dictionary etymology or an acronym.
+const NAME_PARTS: [string, string, string][] = [
+  ["Syn", "Synthesis and synergy", "The connection of knowledge across systems, teams, documents and historical records, to build a more complete understanding of a problem."],
+  ["Ora", "Clarity and discovery", "Discovering useful information, uncovering relevant context, and making complex enterprise knowledge easier to understand."],
+];
+
+const PRINCIPLES: [string, string, string][] = [
+  ["link", "Connect knowledge", "Bring information together from supported enterprise systems: ticketing, engineering platforms and document repositories."],
+  ["layers", "Understand context", "Go beyond isolated keywords to find related incidents, technical discussions, documentation and historical information."],
+  ["shield", "Deliver trustworthy answers", "Support answers with relevant evidence and source references, and say so when the evidence isn't enough rather than presenting guesses as facts."],
+];
 
 const FEATURES: [string, string, string][] = [
   ["sparkles", "Ask Synora", "Describe an issue in your own words. Synora finds the evidence you're allowed to see and writes an answer in which every sentence cites its source."],
@@ -75,7 +88,7 @@ export default async function AboutPage() {
       <header className="page-head">
         <div>
           <h1>About Synora</h1>
-          <p className="muted">{pkg.description} Version {pkg.version}.</p>
+          <p className="muted">What Synora is, how it works and how to use it · Version {pkg.version}</p>
         </div>
         <div className="row-wrap tight">
           <Badge tone="neutral" icon="database">{visible.toLocaleString("en-GB")} records you can search</Badge>
@@ -93,10 +106,48 @@ export default async function AboutPage() {
         </aside>
 
         <div className="about-body" data-about-body>
-          <section id="overview" className="card" data-about-section>
-            <h2>Overview</h2>
+          <section id="overview" className="card about-brand" data-about-section>
+            <h2 className="sr-only">Overview</h2>
+            <div className="brand-intro" data-about-item>
+              <span className="brand-intro-mark"><Logo size={56} /></span>
+              <div className="min0">
+                <p className="brand-intro-name">Synora</p>
+                <p className="brand-intro-tagline">Enterprise intelligence, connected.</p>
+              </div>
+            </div>
+            <p className="brand-intro-headline" data-about-item>One question. Connected knowledge. Clear answers.</p>
+            <p className="brand-intro-lead" data-about-item>Synora brings enterprise knowledge together to help people find relevant information, understand technical issues, and discover evidence-backed answers across connected sources.</p>
             <p data-about-item>Synora is one search across the places support and engineering knowledge lives: HDA tickets, Azure DevOps work items and wikis, and SharePoint and OneDrive documents. Ask about an issue the way you would ask a colleague. Synora finds what was seen before, what caused it and what fixed it, and answers with citations to the records themselves.</p>
             <p data-about-item>It is built to be trustworthy rather than merely fluent: it only uses records you are allowed to open, every claim links to its source, confidence is calculated from the evidence, and when the evidence isn&apos;t good enough it says so instead of guessing.</p>
+          </section>
+
+          <section id="name" className="card" data-about-section>
+            <h2>Why the name Synora?</h2>
+            <p className="small muted">The name is our brand&apos;s interpretation of what Synora does, not a dictionary definition or an acronym.</p>
+            <div className="name-grid">
+              {NAME_PARTS.map(([part, meaning, text]) => (
+                <div key={part} className="name-part" data-about-item>
+                  <span className="name-syllable" aria-hidden="true">{part}</span>
+                  <div className="min0"><h3>{meaning}</h3><p className="small">{text}</p></div>
+                </div>
+              ))}
+            </div>
+            <div className="name-together" data-about-item>
+              <h3>Together: Synora</h3>
+              <p className="small">A connected intelligence experience that brings scattered enterprise knowledge together and helps people discover answers grounded in evidence.</p>
+            </div>
+          </section>
+
+          <section id="principles" data-about-section>
+            <h2 className="about-h2">Guiding principles</h2>
+            <div className="a-grid">{PRINCIPLES.map(([icon, title, text]) => (
+              <article key={title} className="card about-feature about-principle" data-about-item><span className="principle-icon"><Icon name={icon} size={20} /></span><h3>{title}</h3><p className="small muted">{text}</p></article>
+            ))}</div>
+          </section>
+
+          <section id="vision" className="about-vision" data-about-section>
+            <h2>Our vision</h2>
+            <blockquote data-about-item>“To make enterprise knowledge accessible, connected, and actionable — enabling people to spend less time searching for information and more time solving problems.”</blockquote>
           </section>
 
           <section id="features" data-about-section>
@@ -116,6 +167,9 @@ export default async function AboutPage() {
                   <td>{c.lastSyncAt ? c.lastSyncAt.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "Never"}</td></tr>
               ))}</tbody>
             </table></div>
+            <p className="small muted" data-about-item>
+              <b>Planned, not yet available:</b> {CONNECTOR_CATALOG.filter((c) => !c.available).map((c) => c.name).join(", ")}. They aren&apos;t searched until they are built and connected.
+            </p>
           </section>
 
           <section id="answers" className="card" data-about-section>
