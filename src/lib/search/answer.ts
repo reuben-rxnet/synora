@@ -24,23 +24,44 @@ export interface Evidence {
   excerpt: string;
   similarity: number;
   matchedTerms: number;
+  termCount?: number;
   exactRef: boolean;
 }
 
+export type AnswerFormat = "troubleshooting" | "factual" | "comparison" | "summary";
 export interface AnswerBody {
+  format: AnswerFormat;
+  heading: string;
+  /** The direct answer. Every sentence cites the records that state it. */
   summary: { text: string; citations: string[] }[];
-  steps: { title: string; detail: string; citations: string[] }[];
+  /** documented and pattern items cite their records; a hypothesis is an interpretation and may cite none. */
+  explanation: { text: string; status: "documented" | "pattern" | "hypothesis"; citations: string[] }[];
+  /** documented steps cite the record describing them; recommended ones are Synora's suggestion. */
+  steps: { title: string; detail: string; basis: "documented" | "recommended"; citations: string[] }[];
   hypotheses: { text: string; status: string; citations: string[] }[];
+  unknowns: string[];
+  validation: string[];
+  followUps: string[];
+  clarification: string | null;
   warnings: { kind: "temporary-fix" | "stale" | "discussion-only" | "historical" | "conflict"; text: string }[];
 }
+type Draft = Omit<AnswerBody, "warnings">;
 
 export interface Confidence { level: "high" | "medium" | "low"; why: string; factors: string[] }
 
-/** Thresholds calibrated on the demo set with multilingual-e5-small (related ≥ 0.83, unrelated ≤ 0.80). */
-export const SUPPORT = { similarity: Number(process.env.SEARCH_MIN_SIMILARITY || 0.83), terms: 2 };
+/**
+ * When a record supports an answer. multilingual-e5-small scores almost any text 0.77–0.85 against a question, so
+ * similarity alone at 0.83 let unrelated questions through ("cafeteria menu" matched tickets). Measured on the
+ * evaluation set (npm run eval): out-of-scope questions peak at 0.77–0.85 with 1–3 common words matched; real ones
+ * at 0.86–0.95. So a record is supported when it is named exactly, is a strong semantic match, or is a good
+ * semantic match that also covers most of the question's words.
+ */
+export const SUPPORT = { strong: Number(process.env.SEARCH_STRONG_SIMILARITY || 0.86), similarity: Number(process.env.SEARCH_MIN_SIMILARITY || 0.83), coverage: 0.6, terms: 3 };
 
-export function isSupported(e: Pick<Evidence, "similarity" | "matchedTerms" | "exactRef">): boolean {
-  return e.exactRef || e.similarity >= SUPPORT.similarity || e.matchedTerms >= SUPPORT.terms;
+export function isSupported(e: Pick<Evidence, "similarity" | "matchedTerms" | "exactRef"> & { termCount?: number }): boolean {
+  if (e.exactRef || e.similarity >= SUPPORT.strong) return true;
+  const coverage = e.termCount ? e.matchedTerms / e.termCount : e.matchedTerms >= SUPPORT.terms ? 1 : 0;
+  return coverage >= SUPPORT.coverage && (e.similarity >= SUPPORT.similarity || e.matchedTerms >= SUPPORT.terms);
 }
 
 /** Enough authorized evidence to answer: two supported records, or one that is approved knowledge or named exactly. */
@@ -49,7 +70,7 @@ export function hasEnoughEvidence(evidence: Evidence[]): boolean {
   return s.length >= 2 || s.some((e) => e.evidenceKind === "approved" || e.exactRef);
 }
 
-const TEMPORARY = /\b(restart|reboot|re-?ran|retry|retried|temporar)/i;
+export const TEMPORARY = /\b(restart|reboot|re-?ran|retry|retried|temporar)/i;
 const UNCONFIRMED = /\b(not confirmed|suspected|possibly|unknown|discussed)\b/i;
 
 export function confirmedRootCause(e: Evidence): boolean {
@@ -89,27 +110,54 @@ export function warningsFor(cited: Evidence[]): AnswerBody["warnings"] {
   return w;
 }
 
-/** Keeps only citations that point at real evidence, and drops claims left without one. */
-export function enforceCitations(body: Omit<AnswerBody, "warnings">, evidence: Evidence[]): Omit<AnswerBody, "warnings"> {
+/** Strips evidence ids a model may leave in plain text ("[E2]"), so uncited lists don't look cited. */
+const plain = (t: string) => t.replace(/\s*\[?\bE\d{1,2}\b\]?/g, "").replace(/\s+([.,;:])/g, "$1").trim();
+
+/**
+ * Keeps only citations that point at real evidence and drops claims left without one: summary sentences,
+ * documented explanations and patterns. A documented step that lost its citations is kept as a recommendation,
+ * so it is never shown as if a source described it. Hypotheses and recommendations stay, labelled as such.
+ */
+export function enforceCitations(body: Draft, evidence: Evidence[]): Draft {
   const ids = new Set(evidence.map((e) => e.id));
-  const clean = <T extends { citations: string[] }>(xs: T[]) => xs.map((x) => ({ ...x, citations: [...new Set(x.citations.map((c) => c.trim().toUpperCase()).filter((c) => ids.has(c)))] })).filter((x) => x.citations.length > 0);
-  return { summary: clean(body.summary), steps: clean(body.steps).slice(0, 7), hypotheses: clean(body.hypotheses).slice(0, 4) };
+  const valid = (cs: string[]) => [...new Set(cs.map((c) => c.trim().toUpperCase()).filter((c) => ids.has(c)))];
+  const cited = <T extends { citations: string[] }>(xs: T[]) => xs.map((x) => ({ ...x, citations: valid(x.citations) }));
+  const short = (xs: string[], n: number) => [...new Set(xs.map(plain).filter((x) => x.length > 3))].slice(0, n);
+  return {
+    format: body.format,
+    heading: plain(body.heading).slice(0, 120),
+    summary: cited(body.summary).filter((x) => x.citations.length > 0),
+    explanation: cited(body.explanation).filter((x) => x.status === "hypothesis" || x.citations.length > 0).slice(0, 4),
+    steps: cited(body.steps).map((x) => (x.basis === "documented" && !x.citations.length ? { ...x, basis: "recommended" as const } : x)).slice(0, 6),
+    hypotheses: cited(body.hypotheses).filter((x) => x.citations.length > 0).slice(0, 4),
+    unknowns: short(body.unknowns, 5), validation: short(body.validation, 4), followUps: short(body.followUps, 4),
+    clarification: body.clarification ? plain(body.clarification) || null : null,
+  };
 }
 
 const modelOutput = z.object({
   insufficient: z.boolean(),
+  format: z.enum(["troubleshooting", "factual", "comparison", "summary"]),
+  heading: z.string(),
   summary: z.array(z.object({ text: z.string(), citations: z.array(z.string()) })),
-  steps: z.array(z.object({ title: z.string(), detail: z.string(), citations: z.array(z.string()) })),
+  explanation: z.array(z.object({ text: z.string(), status: z.enum(["documented", "pattern", "hypothesis"]), citations: z.array(z.string()) })),
+  steps: z.array(z.object({ title: z.string(), detail: z.string(), basis: z.enum(["documented", "recommended"]), citations: z.array(z.string()) })),
   hypotheses: z.array(z.object({ text: z.string(), status: z.string(), citations: z.array(z.string()) })),
+  unknowns: z.array(z.string()), validation: z.array(z.string()), followUps: z.array(z.string()),
+  clarification: z.string(),
 });
 
-function evidenceBlock(evidence: Evidence[]): string {
+/** The evidence as the model sees it. Record text sits between markers and is declared untrusted in the prompt. */
+export function evidenceBlock(evidence: Evidence[]): string {
+  const safe = (t: string) => t.replace(/<\/?record[^>]*>/gi, "");
   return evidence.map((e) => [
-    `[${e.id}] ${e.ref} · ${e.sourceSystem} · ${e.recordType} · ${e.evidenceKind}${e.status ? ` · ${e.status}` : ""}${e.updatedAt ? ` · updated ${e.updatedAt.toISOString().slice(0, 10)}` : ""}`,
-    `Title: ${e.title}`,
-    e.rootCause ? `Root cause: ${e.rootCause}` : "",
-    e.resolution ? `Resolution: ${e.resolution}` : "",
-    `Excerpt: ${e.excerpt}`,
+    `<record id="${e.id}">`,
+    `${e.ref} · ${e.sourceSystem} · ${e.recordType} · ${e.evidenceKind}${e.status ? ` · ${e.status}` : ""}${e.updatedAt ? ` · updated ${e.updatedAt.toISOString().slice(0, 10)}` : ""}`,
+    `Title: ${safe(e.title)}`,
+    e.rootCause ? `Root cause: ${safe(e.rootCause)}` : "",
+    e.resolution ? `Resolution: ${safe(e.resolution)}` : "",
+    `Excerpt: ${safe(e.excerpt)}`,
+    "</record>",
   ].filter(Boolean).join("\n")).join("\n\n");
 }
 
@@ -129,7 +177,7 @@ export function activeProvider(): { provider: AiProvider; note: string | null } 
   }
 }
 
-export interface Generated { body: Omit<AnswerBody, "warnings">; insufficient: boolean; modelId: string | null; inputTokens: number | null; outputTokens: number | null }
+export interface Generated { body: Draft; insufficient: boolean; modelId: string | null; inputTokens: number | null; outputTokens: number | null }
 
 export async function generate(question: string, evidence: Evidence[], investigate: boolean, provider: AiProvider): Promise<Generated> {
   if (provider === "mock") return { ...composeWithoutAi(question, evidence, investigate), modelId: null, inputTokens: null, outputTokens: null };
@@ -140,7 +188,8 @@ export async function generate(question: string, evidence: Evidence[], investiga
     user: `Question: ${question}\n\nEvidence:\n${evidenceBlock(evidence)}`,
     parse: (raw) => modelOutput.parse(raw),
   });
-  return { body: { summary: r.value.summary, steps: r.value.steps, hypotheses: r.value.hypotheses }, insufficient: r.value.insufficient, modelId: r.modelId, inputTokens: r.inputTokens, outputTokens: r.outputTokens };
+  const { insufficient, clarification, ...rest } = r.value;
+  return { body: { ...rest, clarification: clarification.trim() || null }, insufficient, modelId: r.modelId, inputTokens: r.inputTokens, outputTokens: r.outputTokens };
 }
 
 const firstSentences = (s: string, n = 2) => (s.replace(/\s+/g, " ").match(/[^.!?]+[.!?]+/g) ?? [s]).slice(0, n).join(" ").trim();
@@ -149,10 +198,10 @@ const firstSentences = (s: string, n = 2) => (s.replace(/\s+/g, " ").match(/[^.!
  * Deterministic answer without AI: extracts from the best evidence. Used when external AI is off,
  * so the product stays useful and honest (it says the answer was composed without AI).
  */
-export function composeWithoutAi(_question: string, evidence: Evidence[], investigate: boolean): { body: Omit<AnswerBody, "warnings">; insufficient: boolean } {
+export function composeWithoutAi(_question: string, evidence: Evidence[], investigate: boolean): { body: Draft; insufficient: boolean } {
   const supported = evidence.filter(isSupported).slice(0, 5);
   const lead = supported.find((e) => e.evidenceKind === "approved") ?? supported[0];
-  if (!lead) return { body: { summary: [], steps: [], hypotheses: [] }, insufficient: true };
+  if (!lead) return { body: { format: "summary", heading: "", summary: [], explanation: [], steps: [], hypotheses: [], unknowns: [], validation: [], followUps: [], clarification: null }, insufficient: true };
   const similar = supported.filter((e) => e !== lead && e.evidenceKind !== "approved");
   const temporary = supported.filter((e) => e.evidenceKind === "historical" && TEMPORARY.test(e.resolution ?? "") && !confirmedRootCause(e));
   const summary = [{
@@ -165,16 +214,16 @@ export function composeWithoutAi(_question: string, evidence: Evidence[], invest
   if (temporary.length) summary.push({ text: "In those cases a restart or retry only restored service for a while, so the underlying cause is probably still present.", citations: temporary.map((e) => e.id) });
 
   // Steps never repeat a temporary fix or a discussion's action as a recommendation.
-  const steps: { title: string; detail: string; citations: string[] }[] = [];
+  const steps: Draft["steps"] = [];
   for (const e of supported) {
-    if (e.evidenceKind === "approved" && e.resolution) steps.push({ title: firstSentences(e.resolution, 1), detail: `Approved guidance (${e.ref}).`, citations: [e.id] });
-    else if (e.evidenceKind === "historical" && confirmedRootCause(e) && e.resolution) steps.push({ title: `Check whether the earlier cause applies: ${e.rootCause!.replace(/\.$/, "")}.`, detail: `Fixed then by: ${firstSentences(e.resolution, 1)} (${e.ref})`, citations: [e.id] });
+    if (e.evidenceKind === "approved" && e.resolution) steps.push({ title: firstSentences(e.resolution, 1), detail: `Approved guidance (${e.ref}).`, basis: "documented", citations: [e.id] });
+    else if (e.evidenceKind === "historical" && confirmedRootCause(e) && e.resolution) steps.push({ title: `Check whether the earlier cause applies: ${e.rootCause!.replace(/\.$/, "")}.`, detail: `Fixed then by: ${firstSentences(e.resolution, 1)} (${e.ref})`, basis: "documented", citations: [e.id] });
     else if (e.rootCause && UNCONFIRMED.test(e.rootCause)) {
       const cause = e.rootCause.replace(/^(suspected|not confirmed|discussed)[^a-z]*/i, "").replace(/^(not confirmed|discussed)[.,]?\s*/i, "").replace(/engineer note:\s*/i, "").replace(/["“”]/g, "").replace(/\.$/, "").trim();
-      if (cause.length >= 12 && !/^(not confirmed|discussed)/i.test(cause)) steps.push({ title: `Check the suspected cause: ${cause}.`, detail: `Suspected in ${e.ref}, not confirmed.`, citations: [e.id] });
+      if (cause.length >= 12 && !/^(not confirmed|discussed)/i.test(cause)) steps.push({ title: `Check the suspected cause: ${cause}.`, detail: `Suspected in ${e.ref}, not confirmed.`, basis: "documented", citations: [e.id] });
     }
-    else if (e.evidenceKind === "reference" && e.resolution) steps.push({ title: firstSentences(e.resolution, 1), detail: `From the reference document ${e.ref}.`, citations: [e.id] });
-    else if (e.evidenceKind === "dev_work") steps.push({ title: `Follow ${e.ref}: ${e.title}.`, detail: e.status ? `Status: ${e.status}.` : "", citations: [e.id] });
+    else if (e.evidenceKind === "reference" && e.resolution) steps.push({ title: firstSentences(e.resolution, 1), detail: `From the reference document ${e.ref}.`, basis: "documented", citations: [e.id] });
+    else if (e.evidenceKind === "dev_work") steps.push({ title: `Follow ${e.ref}: ${e.title}.`, detail: e.status ? `Status: ${e.status}.` : "", basis: "documented", citations: [e.id] });
   }
   steps.sort((a, b) => Number(b.detail.startsWith("Approved")) - Number(a.detail.startsWith("Approved")));
   const seen = new Set<string>();
@@ -182,7 +231,25 @@ export function composeWithoutAi(_question: string, evidence: Evidence[], invest
   const hypotheses = investigate
     ? supported.filter((e) => e.rootCause).map((e) => ({ text: e.rootCause!, status: confirmedRootCause(e) ? "supported" : "possible", citations: [e.id] })).slice(0, 4)
     : [];
-  return { body: { summary, steps, hypotheses }, insufficient: false };
+  // Without AI, explanation, gaps and follow-ups come only from what the metadata establishes.
+  const confirmed = supported.filter(confirmedRootCause);
+  const explanation: Draft["explanation"] = [];
+  if (temporary.length) explanation.push({ text: `In ${temporary.length} record${temporary.length > 1 ? "s" : ""} a restart or retry restored service, but no permanent cause was recorded.`, status: "pattern", citations: temporary.map((e) => e.id) });
+  for (const e of confirmed.slice(0, 2)) explanation.push({ text: `${e.ref} records the cause: ${e.rootCause!.replace(/\.$/, "")}.`, status: "documented", citations: [e.id] });
+  const unknowns = [
+    ...(confirmed.length ? [] : ["None of the matching records confirms the root cause."]),
+    ...(supported.some((e) => e.evidenceKind === "approved") ? [] : ["No approved knowledge covers this; the records are historical or reference material."]),
+  ];
+  const validation = temporary.length ? ["After a fix, check the problem doesn't return over a period longer than the earlier recoveries lasted."] : [];
+  const apps = [...new Set(supported.map((e) => e.application).filter((a): a is string => !!a))];
+  const followUps = [
+    ...(confirmed[0] ? [`What fixed ${confirmed[0].ref}?`] : []),
+    ...(apps[0] ? [`Is there approved guidance for ${apps[0]}?`] : []),
+    `Show incidents similar to ${lead.ref}`,
+  ].slice(0, 4);
+  const format: AnswerFormat = temporary.length || confirmed.length || investigate ? "troubleshooting" : "summary";
+  const heading = lead.evidenceKind === "approved" ? `Approved guidance: ${lead.title}` : temporary.length && !confirmed.length ? "Temporary recovery seen; root cause not confirmed" : lead.title;
+  return { body: { format, heading: heading.slice(0, 120), summary, explanation, steps, hypotheses, unknowns, validation, followUps, clarification: null }, insufficient: false };
 }
 
 export { ANSWER_PROMPT_VERSION };

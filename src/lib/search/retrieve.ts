@@ -22,6 +22,8 @@ export interface Hit {
   similarity: number;
   keywordRank: number | null;
   matchedTerms: number;
+  /** How many keyword terms the question has, so a match can be judged by how much of the question it covers. */
+  termCount: number;
   exactRef: boolean;
   excerpt: string;
 }
@@ -59,13 +61,13 @@ export async function retrieve(q: ParsedQuery, principals: string[], filters: Se
     WHERE ${where} AND r.acl && ${principals}::text[] AND c.tsv @@ to_tsquery('simple', ${tsq})
     ORDER BY rank DESC LIMIT ${CANDIDATES}` : [];
 
-  const refRows = q.refs.length ? await db.$queryRaw<{ recordId: string; chunkId: string }[]>`
+  const refRows = q.refs.length ? await db.$queryRaw<{ recordId: string; chunkId: string | null }[]>`
     SELECT r.id AS "recordId", (SELECT c.id FROM "Chunk" c WHERE c."recordId" = r.id ORDER BY c.ordinal LIMIT 1) AS "chunkId" FROM "SourceRecord" r WHERE ${where} AND r.acl && ${principals}::text[] AND upper(r.ref) = ANY(${q.refs}::text[])` : [];
 
   const byRecord = new Map<string, Hit & { chunkId: string }>();
   const get = (recordId: string, chunkId: string) => {
     let h = byRecord.get(recordId);
-    if (!h) { h = { recordId, chunkId, score: 0, similarity: 0, keywordRank: null, matchedTerms: 0, exactRef: false, excerpt: "" }; byRecord.set(recordId, h); }
+    if (!h) { h = { recordId, chunkId, score: 0, similarity: 0, keywordRank: null, matchedTerms: 0, termCount: q.terms.length, exactRef: false, excerpt: "" }; byRecord.set(recordId, h); }
     return h;
   };
   const seenV = new Set<string>();
@@ -80,10 +82,21 @@ export async function retrieve(q: ParsedQuery, principals: string[], filters: Se
     h.matchedTerms = Math.max(h.matchedTerms, row.matched);
     if (!seenK.has(row.recordId)) { seenK.add(row.recordId); h.keywordRank = seenK.size; h.score += 1 / (RRF_K + seenK.size); }
   });
-  for (const row of refRows) { const h = get(row.recordId, row.chunkId); h.exactRef = true; h.score += 1; }
+  // A record named exactly may have no chunks yet (not indexed, or empty); it still ranks, without an excerpt.
+  for (const row of refRows) { const h = get(row.recordId, row.chunkId ?? ""); h.exactRef = true; h.score += 1; }
 
   const top = [...byRecord.values()].sort((a, b) => b.score - a.score).slice(0, limit);
-  const chunks = await db.chunk.findMany({ where: { id: { in: top.map((t) => t.chunkId) } }, select: { id: true, text: true } });
+  // Records found only by keywords or by reference have no similarity yet: score their best chunk against the
+  // question, so "supported" and the relevance shown are based on the real similarity, not a missing value.
+  const unscored = top.filter((h) => h.similarity === 0).map((h) => h.recordId);
+  if (unscored.length) {
+    const best = await db.$queryRaw<{ recordId: string; chunkId: string; sim: number }[]>`
+      SELECT DISTINCT ON (c."recordId") c."recordId", c.id AS "chunkId", 1 - (c.embedding <=> ${toVector(vec!)}::vector) AS sim
+      FROM "Chunk" c WHERE c."recordId" = ANY(${unscored}::text[]) AND c.embedding IS NOT NULL
+      ORDER BY c."recordId", c.embedding <=> ${toVector(vec!)}::vector`;
+    for (const b of best) { const h = byRecord.get(b.recordId)!; h.similarity = b.sim; if (!h.chunkId || !h.keywordRank) h.chunkId = b.chunkId; }
+  }
+  const chunks = await db.chunk.findMany({ where: { id: { in: top.map((t) => t.chunkId).filter(Boolean) } }, select: { id: true, text: true } });
   const text = new Map(chunks.map((c) => [c.id, c.text]));
   return top.map(({ chunkId, ...h }) => ({ ...h, excerpt: (text.get(chunkId) ?? "").slice(0, 900) }));
 }

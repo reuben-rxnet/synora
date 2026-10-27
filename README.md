@@ -82,6 +82,17 @@ How it works: the refresh token is stored encrypted (AES-256-GCM, key from `CRED
 - Linked records are read by name (`Service.Description`). If HDA rejects an expression, the sync uses its `fallback` (the raw id) or skips it and logs it, so one wrong name can't stop a sync.
 - Load on HDA: searching never calls HDA. A sync sends one request at a time, at least `requestDelayMs` (300 ms) apart. Each page of 200 tickets takes about 5 Projection calls (columns are split to keep every URL under `maxUrlLength`), plus one `/WSC/Get` per ticket whose text HDA cut short. Pages are read by solved date, not by offset, so deep pages cost HDA no more than the first. Group members are re-read once a day. After a failed sync, the next attempt waits for the normal schedule.
 
+## Search results and quality
+
+The search page follows `Design Reference/Synora Enterprise AI Search Dashboard.png` (the full requirement is in `Design Reference/Search Results Experience - Specification.md`): an answer panel and an **Evidence across connected sources** panel side by side, with **Answer**, **Evidence & Sources**, **Related Issues** and **Follow-up Questions** tabs over one search (switching tabs never searches again).
+
+- **Answer** (prompt `answer-v2`): a direct conclusion first, then, where the evidence supports it, a likely explanation whose points are marked *documented*, *pattern across records* or *hypothesis*; steps marked as documented (cited) or as Synora's recommendation; what remains unknown; and how to confirm a fix worked. Evidence text is passed to the model as untrusted data inside record markers.
+- **Status badges** come from the cited records only: root cause confirmed or not, temporary recovery, approved knowledge, age. **Evidence strength** is the existing heuristic (record count, approved knowledge, confirmed cause, temporary fixes, age); it is not calibrated and is not shown as a probability.
+- **Evidence**: the eight strongest records plus a place for each other source with supported evidence, so one large source can't crowd out the rest. Each card shows a retrieval-relevance tier (exact, strong, related; not a percentage), an evidence role from its metadata (confirmed resolution, temporary recovery only, documentation, investigation in progress…) and a link to the original. Demonstration records are always grouped and labelled as such and have no external link. **Sources covered** lists every connected source and whether it was actually searched.
+- **Related issues**: records linked to the evidence (parent, duplicate, mentioned) and further matches, permission-checked.
+
+`npm run eval` measures retrieval on 213 queries generated from the index (`eval/queries.json`): exact references, titles, description openings, error codes, records the evaluation user must not see, and out-of-scope questions. It reports Recall@5/10, Precision@5/10, MRR, NDCG@10, exact-reference success, duplicate rate, permission leaks, abstention, sources per answer and latency, and scores the previous support rule on the same data for comparison. Answer quality (faithfulness, citation precision, helpfulness) needs labelled answers or a review and isn't measured by it.
+
 ## Layout
 
 - `prisma/schema.prisma`: data model. `scripts/db-indexes.ts` adds the indexes Prisma can't express: HNSW, GIN and trigram.
