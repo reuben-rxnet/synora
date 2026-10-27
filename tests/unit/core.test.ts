@@ -3,7 +3,7 @@ import { canSee, principalsFor, permissionsFor } from "@/lib/access";
 import { grantsFromAppRoles } from "@/lib/auth/entra-config";
 import { composeWithoutAi, computeConfidence, enforceCitations, hasEnoughEvidence, warningsFor, type Evidence } from "@/lib/search/answer";
 import { parseQuery, tsQuery } from "@/lib/search/query";
-import { chunkText, effectiveAcl, extractErrorCodes } from "@/lib/ingest";
+import { chunkText, effectiveAcl, extractErrorCodes, wellFormedDeep } from "@/lib/ingest";
 import { loadMapping, toItem } from "@/lib/connectors/hda/connector";
 import { stripHtml } from "@/lib/connectors/hda/client";
 
@@ -145,5 +145,20 @@ describe("HDA mapping", () => {
   });
   it("strips HDA's double-encoded HTML", () => {
     expect(stripHtml("&lt;p&gt;qualit&amp;#224;&lt;/p&gt;")).toBe("qualità");
+  });
+});
+
+describe("text with emoji", () => {
+  const hasLoneSurrogate = (s: string) => /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(s);
+  it("never cuts a chunk between the two halves of an emoji", () => {
+    // "T\n" + 1197 letters puts 👉 across position 1200, where the first chunk ends.
+    const parts = chunkText("T", `${"a".repeat(1197)}👉 Task 170757 retest ${"b ".repeat(900)}`);
+    expect(parts.length).toBeGreaterThan(1);
+    expect(parts.some(hasLoneSurrogate)).toBe(false);
+  });
+  it("repairs stray halves anywhere in an item before it is stored", () => {
+    const item = wellFormedDeep({ title: "ok", body: "cut \uDC49 here", raw: { fields: [{ value: "\uD83D" }] } });
+    expect(hasLoneSurrogate(JSON.stringify(item).replace(/\u[0-9a-f]{4}/gi, ""))).toBe(false);
+    expect(item.body).toBe("cut � here");
   });
 });

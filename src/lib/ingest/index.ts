@@ -9,6 +9,22 @@ import type { SourceItem } from "@/lib/connectors/types";
 const CHUNK_CHARS = 1200;
 const CHUNK_OVERLAP = 150;
 
+/**
+ * Text is cut by UTF-16 position, which can split an emoji or other character outside the basic plane into a lone
+ * half (a surrogate). Postgres rejects those, so a cut never lands between the halves, and anything stored is made
+ * well-formed (a stray half becomes U+FFFD).
+ */
+const isLowSurrogate = (text: string, i: number) => { const c = text.charCodeAt(i); return c >= 0xdc00 && c <= 0xdfff; };
+const safeCut = (text: string, i: number) => (i > 0 && i < text.length && isLowSurrogate(text, i) ? i - 1 : i);
+export const wellFormed = (t: string) => t.toWellFormed();
+/** Every string in an item (title, body, fields in raw…), made well-formed. Exported for tests. */
+export function wellFormedDeep<T>(v: T): T {
+  if (typeof v === "string") return wellFormed(v) as T;
+  if (Array.isArray(v)) return v.map(wellFormedDeep) as T;
+  if (v && typeof v === "object" && !(v instanceof Date)) return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, wellFormedDeep(x)])) as T;
+  return v;
+}
+
 /** Splits on paragraph boundaries where possible. The first chunk carries the title so short records still match. */
 export function chunkText(title: string, body: string): string[] {
   const text = `${title}\n${body}`.trim();
@@ -23,9 +39,10 @@ export function chunkText(title: string, body: string): string[] {
       const cut = Math.max(para, sentence);
       if (cut > start + CHUNK_CHARS / 2) end = cut + 1;
     }
-    out.push((out.length ? `${title}\n` : "") + text.slice(start, end).trim());
+    end = safeCut(text, end);
+    out.push(wellFormed((out.length ? `${title}\n` : "") + text.slice(start, end).trim()));
     if (end >= text.length) break;
-    start = Math.max(end - CHUNK_OVERLAP, start + 1);
+    start = safeCut(text, Math.max(end - CHUNK_OVERLAP, start + 1));
   }
   return out;
 }
@@ -51,7 +68,8 @@ export async function upsertItems(connectorId: string, spaceId: string, items: S
   const changed: { id: string; item: SourceItem }[] = [];
   const spaceIds = new Map((await db.space.findMany({ select: { id: true, key: true } })).map((s) => [s.key, s.id]));
 
-  for (const item of items) {
+  for (const original of items) {
+    const item = wellFormedDeep(original);
     const hash = contentHash(item);
     // An unknown space key falls back to the connector's space, never to "everyone".
     const itemSpace = (item.spaceKey && spaceIds.get(item.spaceKey)) || spaceId;
