@@ -1,6 +1,7 @@
 // Seeds spaces, fictional demo people and the demonstration connector, then indexes it.
 // Never touches real connectors' records. Safe to run more than once.
 import { db } from "../src/lib/db";
+import { adoConnectorRow } from "../src/lib/connectors/ado/connector";
 import { runSync } from "../src/lib/connectors/sync";
 
 const SPACES = [
@@ -56,6 +57,8 @@ async function main() {
       statusNote: "Set HDA_USERNAME and HDA_PASSWORD in .env (the same HDA API user as CSAT Pulse), then test the connection. Needs the company VPN.",
     } });
   }
+
+  if (!(await db.connector.findFirst({ where: { type: "ado" } }))) await db.connector.create({ data: adoConnectorRow(spaces.get("development")!) });
 
   console.log("Indexing the demonstration data (the first run downloads the embedding model, ~120 MB)...");
   const r = await runSync(demo.id, { full: true });

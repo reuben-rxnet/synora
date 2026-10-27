@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, Fragment, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { fmtDate, typeText } from "@/lib/format";
 import { Badge, Btn, Callout, DemoTag, Drawer, Icon, IconBtn, KindBadge, Logo, Modal, Popover, SourceIcon, StatusPill } from "./ui";
 
@@ -141,7 +141,10 @@ interface RecordDetail {
   sensitivity: string; errorCodes: string[]; demo: boolean;
   linked: { id: string; ref: string; title: string; sourceSystem: string; kind: string }[];
   related: { id: string; ref: string; title: string; sourceSystem: string }[];
+  fields: { label: string; value: string; tier?: string; person?: boolean }[];
 }
+
+const fieldValue = (v: string) => (/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/.test(v) ? fmtDate(v) : v);
 
 const KIND_TEXT: Record<string, string> = { approved: "Approved knowledge", historical: "Historical evidence", discussion: "Email or chat discussion", dev_work: "Development work item" };
 
@@ -188,6 +191,12 @@ function RecordDrawer({ id, onClose, onOpen }: { id: string; onClose: () => void
           {r.resolution && <><dt>Resolution</dt><dd>{r.resolution}</dd></>}
           {r.errorCodes.length > 0 && <><dt>Error codes</dt><dd className="mono">{r.errorCodes.join(", ")}</dd></>}
         </dl>
+        {r.fields?.length > 0 && (
+          <details className="rd-fields">
+            <summary className="eyebrow">Source fields ({r.fields.length})</summary>
+            <dl className="rd-dl">{r.fields.map((f) => <Fragment key={f.label}><dt>{f.label}</dt><dd style={{ whiteSpace: "pre-wrap" }}>{fieldValue(f.value)}</dd></Fragment>)}</dl>
+          </details>
+        )}
         {related && (
           <div><span className="eyebrow">Linked and related items</span>
             {!r.linked.length && !r.related.length && <p className="muted small">No related items you can access.</p>}

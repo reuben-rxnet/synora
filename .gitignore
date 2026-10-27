@@ -8,3 +8,4 @@ prototype/node_modules/
 coverage/
 test-results/
 tsconfig.tsbuildinfo
+discover/

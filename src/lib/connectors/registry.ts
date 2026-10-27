@@ -1,17 +1,19 @@
 import type { Connector } from "./types";
 import { demoConnector } from "./demo/connector";
 import { hdaConnector } from "./hda/connector";
+import { adoConnector } from "./ado/connector";
 
 /** Connector types this build can sync. The Sources page lists the rest as "coming next". */
 export const CONNECTORS: Record<string, Connector> = {
   demo: demoConnector,
   hda: hdaConnector,
+  ado: adoConnector,
 };
 
 export const CONNECTOR_CATALOG = [
   { type: "hda", name: "HDA Ticketing", category: "Ticketing", description: "Incidents and requests from HelpDesk Advanced", available: true },
   { type: "demo", name: "Demonstration data", category: "Custom", description: "Fictional records for trying Synora", available: true },
-  { type: "ado", name: "Azure DevOps", category: "Engineering", description: "Bugs, work items, repos and wikis", available: false },
+  { type: "ado", name: "Azure DevOps", category: "Engineering", description: "Bugs, user stories, tasks and features, with comments", available: true },
   { type: "sharepoint", name: "SharePoint", category: "Documents", description: "Sites, libraries and lists", available: false },
   { type: "onedrive", name: "OneDrive", category: "Documents", description: "Personal and shared files", available: false },
   { type: "outlook", name: "Microsoft Outlook", category: "Communication", description: "Shared mailboxes", available: false },

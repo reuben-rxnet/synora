@@ -690,3 +690,11 @@ a.link-btn { color: var(--accent); }
 .stat-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
 @media (max-width: 900px) { .admin-nav ul.admin-links { display: flex; flex-wrap: wrap; gap: 4px; } }
 a.admin-link { text-decoration: none; }
+
+/* HDA owner groups */
+.conn-groups { margin: 0; color: var(--fg-2); }
+.og-wrap { display: grid; gap: 14px; }
+.og-search { display: grid; gap: 6px; }
+.og-results { max-height: 340px; overflow-y: auto; }
+.rd-fields summary { cursor: pointer; }
+.rd-fields[open] summary { margin-bottom: 8px; }

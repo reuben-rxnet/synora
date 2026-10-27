@@ -1,0 +1,98 @@
+{
+  "_readme": "Azure DevOps mapping for Synora. Every field Azure DevOps reports for a work item is mapped: text, path and pick-list fields join the searchable text, dates and numbers are shown in the record panel, and identity fields (people) are shown by display name only, never searchable or sent to the AI. `textFields` form the main content, in this order. `skipFields` / `skipFieldPrefixes` drop bookkeeping fields. Comments are added as a Discussion section without author names. `wiki`: the project wikis are indexed as documents; pages under `approvedPaths` (e.g. \"/Runbooks\") count as approved knowledge in answers, all other pages as development documentation. New pages are read at the next sync; known pages are re-checked every `refreshHours`, at most `maxRefreshPerSync` per sync.",
+  "initialLookbackDays": 730,
+  "pageSize": 200,
+  "requestDelayMs": 200,
+  "fetchComments": true,
+  "maxCommentsPerItem": 200,
+  "maxBodyChars": 40000,
+  "workItemTypes": [],
+  "excludeWorkItemTypes": [],
+  "recordTypes": {
+    "Bug": "bug"
+  },
+  "textFields": [
+    {
+      "field": "System.Description",
+      "label": "Description"
+    },
+    {
+      "field": "Microsoft.VSTS.TCM.ReproSteps",
+      "label": "Repro steps"
+    },
+    {
+      "field": "Microsoft.VSTS.TCM.SystemInfo",
+      "label": "System info"
+    },
+    {
+      "field": "Microsoft.VSTS.Common.AcceptanceCriteria",
+      "label": "Acceptance criteria"
+    },
+    {
+      "field": "Microsoft.VSTS.CMMI.Analysis",
+      "label": "Analysis"
+    },
+    {
+      "field": "Microsoft.VSTS.CMMI.ProposedFix",
+      "label": "Proposed fix"
+    },
+    {
+      "field": "Microsoft.VSTS.Common.Resolution",
+      "label": "Resolution"
+    }
+  ],
+  "core": {
+    "title": "System.Title",
+    "type": "System.WorkItemType",
+    "state": "System.State",
+    "area": "System.AreaPath",
+    "iteration": "System.IterationPath",
+    "priority": "Microsoft.VSTS.Common.Priority",
+    "severity": "Microsoft.VSTS.Common.Severity",
+    "createdAt": "System.CreatedDate",
+    "changedAt": "System.ChangedDate",
+    "commentCount": "System.CommentCount",
+    "rootCause": "Microsoft.VSTS.CMMI.RootCause",
+    "resolvedReason": "Microsoft.VSTS.Common.ResolvedReason",
+    "resolution": "Microsoft.VSTS.Common.Resolution"
+  },
+  "skipFields": [
+    "System.Id",
+    "System.Rev",
+    "System.Watermark",
+    "System.AuthorizedAs",
+    "System.AuthorizedDate",
+    "System.RevisedDate",
+    "System.PersonId",
+    "System.History",
+    "System.TeamProject",
+    "System.NodeName",
+    "System.AreaId",
+    "System.IterationId",
+    "System.Title",
+    "System.CommentCount",
+    "System.BoardColumnDone",
+    "System.ExternalLinkCount",
+    "System.HyperLinkCount",
+    "System.AttachedFileCount",
+    "System.RelatedLinkCount",
+    "System.RemoteLinkCount"
+  ],
+  "skipFieldPrefixes": [
+    "System.AreaLevel",
+    "System.IterationLevel",
+    "WEF_"
+  ],
+  "wiki": {
+    "enabled": true,
+    "approvedPaths": [],
+    "skipPaths": [
+      "/.attachments"
+    ],
+    "maxPages": 5000,
+    "batchSize": 25,
+    "refreshHours": 24,
+    "maxRefreshPerSync": 100
+  },
+  "hdaRefPattern": "\\b[A-Z]\\d{6,8}[LC]\\b"
+}

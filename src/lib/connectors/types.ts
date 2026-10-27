@@ -70,6 +70,8 @@ export interface Connector {
   fetchChanges(ctx: SyncContext, cursor: string | null): AsyncGenerator<ChangeBatch>;
   /** Group memberships the source knows about (e.g. HDA owner-group members), synced into Group/UserGroup. */
   fetchMemberships?(ctx: SyncContext): Promise<{ groupKey: string; groupName: string; memberLogins: string[] }[]>;
+  /** Re-read memberships at most this often (full syncs always do). Unset: after every sync. */
+  membershipSyncHours?: number;
 }
 
 export class ConnectorError extends Error {

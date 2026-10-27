@@ -6,6 +6,12 @@ import { handle } from "@/server/http";
 
 export const dynamic = "force-dynamic";
 
+type SourceField = { label: string; value: string; tier?: string; person?: boolean };
+const sourceFields = (raw: unknown): SourceField[] => {
+  const f = (raw as { fields?: unknown } | null)?.fields;
+  return Array.isArray(f) ? (f as SourceField[]).filter((x) => x && typeof x.label === "string" && typeof x.value === "string").map(({ label, value, tier, person }) => ({ label, value, tier, person })) : [];
+};
+
 /** One record for the source preview. A record the person can't see answers 404, not 403, so its existence isn't revealed. */
 export const GET = handle(async (_req: Request, ctx: RouteContext<"/api/records/[id]">) => {
   const session = await requireSession();
@@ -30,6 +36,8 @@ export const GET = handle(async (_req: Request, ctx: RouteContext<"/api/records/
     location: r.location, category: r.category, ownerGroup: r.ownerGroup, priority: r.priority, status: r.status, rootCause: r.rootCause,
     resolution: r.resolution, sourceUrl: r.sourceUrl, updatedAt: (r.sourceUpdatedAt ?? r.indexedAt).toISOString(), space: r.space.name,
     sensitivity: r.sensitivity, errorCodes: r.errorCodes, demo: (r.raw as { demo?: boolean } | null)?.demo === true,
+    // Extended source fields (HDA's mapping). Only people who can see the record get here, so names may be shown.
+    fields: sourceFields(r.raw),
     linked: linked.map((l) => ({ ...pick(l.rec), kind: l.kind })),
     related: sameApp.filter((x) => !linked.some((l) => l.rec.id === x.id)),
   });

@@ -34,7 +34,9 @@ export async function runSync(connectorId: string, opts: { full?: boolean } = {}
       await db.connector.update({ where: { id: connectorId }, data: { cursor: batch.cursor } });
       await db.syncRun.update({ where: { id: run.id }, data: totals });
     }
-    if (connector.fetchMemberships) await syncMemberships(await connector.fetchMemberships(ctx));
+    if (connector.fetchMemberships && (opts.full || !c.cursor || await membershipsDue(c.type, connector.membershipSyncHours))) {
+      await syncMemberships(await connector.fetchMemberships(ctx));
+    }
 
     const recordCount = await db.sourceRecord.count({ where: { connectorId, deletedAt: null } });
     await db.syncRun.update({ where: { id: run.id }, data: { ...totals, status: "succeeded", finishedAt: new Date() } });
@@ -46,9 +48,17 @@ export async function runSync(connectorId: string, opts: { full?: boolean } = {}
     const text = e instanceof ConnectorError ? e.message : "The sync stopped because of an unexpected error. See the worker window for details.";
     if (!(e instanceof ConnectorError)) console.error("[sync]", e);
     await db.syncRun.update({ where: { id: run.id }, data: { ...totals, status: totals.added + totals.updated ? "partial" : "failed", finishedAt: new Date(), errorCode: code, errorText: text } });
-    await db.connector.update({ where: { id: connectorId }, data: { status: code === "AUTH" ? "action_required" : "failed", statusNote: text } });
+    // The next attempt waits for the normal schedule: a failing source is not called again every few seconds.
+    await db.connector.update({ where: { id: connectorId }, data: { status: code === "AUTH" || code === "SETUP" ? "action_required" : "failed", statusNote: text, nextSyncAt: nextRun(c.schedule) } });
     throw e;
   }
+}
+
+/** Group keys are prefixed with the connector type ("hda:G815L"), so the newest one says when they were last read. */
+async function membershipsDue(type: string, hours?: number) {
+  if (!hours) return true;
+  const last = await db.group.findFirst({ where: { key: { startsWith: `${type}:` } }, orderBy: { syncedAt: "desc" }, select: { syncedAt: true } });
+  return !last || Date.now() - last.syncedAt.getTime() > hours * 3600_000;
 }
 
 /** Replaces each source group's members with the logins the source reports, matched to users by email or HDA username. */
