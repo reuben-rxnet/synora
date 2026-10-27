@@ -29,6 +29,16 @@ export function loadAdoMapping(file = process.env.ADO_MAPPING_FILE || "config/ad
   return JSON.parse(readFileSync(join(process.cwd(), file), "utf8")) as AdoMapping;
 }
 
+/**
+ * Work item types skipped for this connector: the list chosen on the Sources page, or the mapping's default
+ * (test management items). Exported for the API and tests.
+ */
+export function excludedTypes(config: Record<string, unknown>, m: Pick<AdoMapping, "excludeWorkItemTypes">): string[] {
+  return Array.isArray(config.excludeWorkItemTypes) ? (config.excludeWorkItemTypes as unknown[]).filter((x): x is string => typeof x === "string") : m.excludeWorkItemTypes;
+}
+/** The client for a connector, for API routes (folder-style pickers). */
+export const adoClientFor = (ctx: Pick<SyncContext, "connectorId" | "config" | "secret">) => adoClient(ctx, loadAdoMapping());
+
 /** Connector settings first, then .env. */
 export function adoSettings(config: Record<string, unknown>) {
   const c = config as Settings;
@@ -275,7 +285,8 @@ export const adoConnector: Connector = {
   },
 
   async *fetchChanges(ctx, cursor): AsyncGenerator<ChangeBatch> {
-    const m = loadAdoMapping();
+    const base = loadAdoMapping();
+    const m = { ...base, excludeWorkItemTypes: excludedTypes(ctx.config, base) };
     const client = adoClient(ctx, m);
     let pos = parseCursor(cursor, m.initialLookbackDays);
     let wikiState = parseWikiState(cursor);

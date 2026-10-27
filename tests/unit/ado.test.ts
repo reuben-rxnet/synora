@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseQuery, workItemIds } from "@/lib/search/query";
 import { evidenceBlock } from "@/lib/search/answer";
-import { adoRef, loadAdoMapping, markdownText, pageQuery, parseCursor, parseWikiState, toWikiPage, toWorkItem, wikiReadPlan } from "@/lib/connectors/ado/connector";
+import { adoRef, excludedTypes, loadAdoMapping, markdownText, pageQuery, parseCursor, parseWikiState, toWikiPage, toWorkItem, wikiReadPlan } from "@/lib/connectors/ado/connector";
 import type { AdoField, AdoWorkItem } from "@/lib/connectors/ado/client";
 
 const m = loadAdoMapping("config/ado-mapping.json");
@@ -132,5 +132,16 @@ describe("Azure DevOps analysis and solution", () => {
   it("uses the Solution as the item's resolution", () => {
     expect(item.resolution).toBe("We restarted the RxCNC service and the machines reconnected.");
     expect(item.ref).toBe("SR_117428");
+  });
+});
+
+describe("Azure DevOps work item types", () => {
+  it("skips test management items by default, and the connector's own choice wins", () => {
+    expect(excludedTypes({}, m)).toEqual(["Test Case", "Test Suite", "Test Plan", "Shared Steps"]);
+    expect(excludedTypes({ excludeWorkItemTypes: ["Observation"] }, m)).toEqual(["Observation"]);
+    expect(excludedTypes({ excludeWorkItemTypes: [] }, m)).toEqual([]);
+  });
+  it("leaves skipped types out of the sync query", () => {
+    expect(pageQuery({ ...m, excludeWorkItemTypes: excludedTypes({}, m) }, { at: "x", id: 0 })).toContain("[System.WorkItemType] NOT IN ('Test Case', 'Test Suite', 'Test Plan', 'Shared Steps')");
   });
 });

@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { assertPermission, requireSession } from "@/lib/auth/session";
 import { connectorFor } from "@/lib/connectors/registry";
 import { activeGroups } from "@/lib/connectors/hda/connector";
+import { excludedTypes, loadAdoMapping } from "@/lib/connectors/ado/connector";
 import { deleteCredential, forgetToken, loadCredential } from "@/lib/connectors/m365/auth";
 import { chosenFolders, folderKey } from "@/lib/connectors/m365/connector";
 import { nextRun, secretReader } from "@/lib/connectors/sync";
@@ -23,6 +24,7 @@ const body = z.discriminatedUnion("action", [
     source: z.enum(["sharepoint", "onedrive"]), approved: z.boolean().optional(),
   })).max(200), siteUrl: z.string().max(500).optional() }),
   z.object({ action: z.literal("m365-signout") }),
+  z.object({ action: z.literal("work-item-types"), excluded: z.array(z.string().min(1).max(100)).max(100) }),
 ]);
 
 export const POST = handle(async (req: Request, ctx: RouteContext<"/api/connectors/[id]">) => {
@@ -95,6 +97,26 @@ export const POST = handle(async (req: Request, ctx: RouteContext<"/api/connecto
     if (syncNow) await enqueue("sync", { connectorId: c.id }, { dedupeKey: `sync:${c.id}` });
     await audit({ folders: folders.map((f) => f.path), added: added.map((f) => f.path), removed: removed.map((f) => f.path), recordsRemoved: deleted });
     return NextResponse.json({ ok: true, recordsRemoved: deleted, syncQueued: syncNow });
+  }
+  if (parsed.data.action === "work-item-types") {
+    if (c.type !== "ado") throw new RequestError("Work item types only apply to Azure DevOps connectors.");
+    const excluded = [...new Set(parsed.data.excluded)];
+    const before = excludedTypes(c.config as Record<string, unknown>, loadAdoMapping());
+    const skippedNow = excluded.filter((t) => !before.includes(t));
+    const included = before.filter((t) => !excluded.includes(t));
+    // Items of newly skipped types leave the index right away.
+    const stale = skippedNow.length ? await db.sourceRecord.findMany({ where: { connectorId: c.id, sourceSystem: "Azure DevOps", category: { in: skippedNow }, deletedAt: null }, select: { externalId: true } }) : [];
+    const removed = await markDeleted(c.id, stale.map((r) => r.externalId));
+    // Items of a type synced again were never fetched, so the work items are read again from the start.
+    const fullSync = included.length > 0 && c.status !== "paused" && c.status !== "not_configured";
+    await db.connector.update({ where: { id }, data: {
+      config: { ...(c.config as Record<string, unknown>), excludeWorkItemTypes: excluded },
+      recordCount: await db.sourceRecord.count({ where: { connectorId: c.id, deletedAt: null } }),
+      ...(fullSync ? { status: "syncing", statusNote: `Queued. Reading the work items again to add ${included.join(", ")}.` } : {}),
+    } });
+    if (fullSync) await enqueue("sync", { connectorId: c.id, full: true }, { dedupeKey: `sync:${c.id}` });
+    await audit({ excluded, skippedNow, included, recordsRemoved: removed });
+    return NextResponse.json({ ok: true, recordsRemoved: removed, fullSync });
   }
   if (parsed.data.action === "m365-signout") {
     if (c.type !== "m365") throw new RequestError("Only SharePoint & OneDrive connectors have a Microsoft 365 sign-in.");

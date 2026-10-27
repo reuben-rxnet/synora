@@ -1,5 +1,5 @@
 {
-  "_readme": "Azure DevOps mapping for Synora. Every field Azure DevOps reports for a work item is mapped: text, path and pick-list fields join the searchable text, dates and numbers are shown in the record panel, and identity fields (people) are shown by display name only, never searchable or sent to the AI. `textFields` form the main content, in this order. `skipFields` / `skipFieldPrefixes` drop bookkeeping fields. Comments are added as a Discussion section without author names. `wiki`: the project wikis are indexed as documents; pages under `approvedPaths` (e.g. \"/Runbooks\") count as approved knowledge in answers, all other pages as reference documents. New pages are read at the next sync; known pages are re-checked every `refreshHours`, at most `maxRefreshPerSync` per sync. `refPrefixes`: the reference Synora shows for a work item is the type's code and its number (User Story 207077 → US_207077), the format the teams use in titles; types not listed get their initials. `resolutionFields`: the first one filled in is the work item's resolution (what fixed it), used by answers and to spot temporary recoveries. `analysisFields`: the team's investigation notes (what was checked and found), always given to the answer step with the evidence and shown on evidence cards.",
+  "_readme": "Azure DevOps mapping for Synora. Every field Azure DevOps reports for a work item is mapped: text, path and pick-list fields join the searchable text, dates and numbers are shown in the record panel, and identity fields (people) are shown by display name only, never searchable or sent to the AI. `textFields` form the main content, in this order. `skipFields` / `skipFieldPrefixes` drop bookkeeping fields. Comments are added as a Discussion section without author names. `wiki`: the project wikis are indexed as documents; pages under `approvedPaths` (e.g. \"/Runbooks\") count as approved knowledge in answers, all other pages as reference documents. New pages are read at the next sync; known pages are re-checked every `refreshHours`, at most `maxRefreshPerSync` per sync. `refPrefixes`: the reference Synora shows for a work item is the type's code and its number (User Story 207077 → US_207077), the format the teams use in titles; types not listed get their initials. `resolutionFields`: the first one filled in is the work item's resolution (what fixed it), used by answers and to spot temporary recoveries. `analysisFields`: the team's investigation notes (what was checked and found), always given to the answer step with the evidence and shown on evidence cards. `excludeWorkItemTypes` is the default list of skipped types; an administrator can change it per connector on the Sources page (Work item types).",
   "initialLookbackDays": 730,
   "pageSize": 200,
   "requestDelayMs": 200,
@@ -7,7 +7,12 @@
   "maxCommentsPerItem": 200,
   "maxBodyChars": 40000,
   "workItemTypes": [],
-  "excludeWorkItemTypes": [],
+  "excludeWorkItemTypes": [
+    "Test Case",
+    "Test Suite",
+    "Test Plan",
+    "Shared Steps"
+  ],
   "recordTypes": {
     "Bug": "bug"
   },

@@ -126,6 +126,11 @@ export class AdoClient {
     } while (token && out.length < max);
     return out.slice(0, max);
   }
+  /** The project's work item types (enabled ones only). */
+  async workItemTypes(): Promise<string[]> {
+    const r = await this.call<{ value: { name: string; isDisabled?: boolean }[] }>("GET", `${this.p}/_apis/wit/workitemtypes`);
+    return r.value.filter((t) => !t.isDisabled).map((t) => t.name);
+  }
   async fields(): Promise<AdoField[]> { return (await this.call<{ value: AdoField[] }>("GET", `${this.p}/_apis/wit/fields`)).value; }
   /** The project's wikis: the project wiki and any code wikis published from a repository. */
   async wikis(): Promise<AdoWiki[]> { return (await this.call<{ value: AdoWiki[] }>("GET", `${this.p}/_apis/wiki/wikis`)).value; }

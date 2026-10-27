@@ -895,3 +895,6 @@ a.admin-link { text-decoration: none; }
   .brand-intro-name { font-size: 1.6rem; }
   .brand-intro-mark { width: 60px; height: 60px; }
 }
+
+.wit-list { columns: 2 240px; column-gap: 18px; }
+.wit-list li { break-inside: avoid; }

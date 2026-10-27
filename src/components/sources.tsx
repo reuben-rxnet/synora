@@ -50,6 +50,7 @@ export function SourcesClient() {
   const [test, setTest] = useState<Record<string, { level: string; message: string }>>({});
   const [groupsFor, setGroupsFor] = useState<string | null>(null);
   const [foldersFor, setFoldersFor] = useState<string | null>(null);
+  const [typesFor, setTypesFor] = useState<string | null>(null);
 
   // Back from the Microsoft 365 sign-in: say how it went, then tidy the address bar.
   useEffect(() => {
@@ -88,6 +89,7 @@ export function SourcesClient() {
   const d = data.connectors.find((c) => c.id === detail) ?? null;
   const g = data.connectors.find((c) => c.id === groupsFor) ?? null;
   const f = data.connectors.find((c) => c.id === foldersFor) ?? null;
+  const wt = data.connectors.find((c) => c.id === typesFor) ?? null;
 
   return (
     <div className="page">
@@ -129,6 +131,7 @@ export function SourcesClient() {
                 {c.status !== "not_configured" && <Btn size="sm" variant="ghost" icon={c.status === "paused" ? "play" : "pause"} disabled={!!busy} onClick={() => act(c, c.status === "paused" ? "resume" : "pause")}>{c.status === "paused" ? "Resume" : "Pause"}</Btn>}
                 {c.type === "hda" && <Btn size="sm" variant="ghost" icon="users" disabled={!!busy} onClick={() => setGroupsFor(c.id)}>Owner groups</Btn>}
                 {c.type === "m365" && !m365Account(c) && <a className="btn btn-primary btn-sm" href={`/api/connectors/${c.id}/m365/connect`}><Icon name="external" size={15} /><span>Sign in to Microsoft 365</span></a>}
+                {c.type === "ado" && <Btn size="sm" variant="ghost" icon="list" disabled={!!busy} onClick={() => setTypesFor(c.id)}>Work item types</Btn>}
                 {c.type === "m365" && m365Account(c) && <Btn size="sm" variant="ghost" icon="folder" disabled={!!busy} onClick={() => setFoldersFor(c.id)}>Folders</Btn>}
                 <Btn size="sm" variant="ghost" icon="eye" onClick={() => setDetail(c.id)}>Details</Btn>
               </div>
@@ -138,6 +141,7 @@ export function SourcesClient() {
       </div>
       {d && <ConnectorDetail c={d} canManage={data.canManage} onFull={() => act(d, "full-sync")} onClose={() => setDetail(null)} />}
       {g && <OwnerGroupsModal c={g} onClose={() => setGroupsFor(null)} onSaved={async (msg) => { setGroupsFor(null); toast(msg, "good"); await load(); }} />}
+      {wt && <WorkItemTypes c={wt} onClose={() => setTypesFor(null)} onSaved={async (msg) => { setTypesFor(null); toast(msg, "good"); await load(); }} />}
       {f && <FolderPicker c={f} onClose={() => setFoldersFor(null)} onSaved={async (msg) => { setFoldersFor(null); toast(msg, "good"); await load(); }} onSignedOut={async () => { setFoldersFor(null); toast("Signed out of Microsoft 365.", "info"); await load(); }} />}
       {adding && <AddSource catalog={data.catalog} existing={data.connectors.map((c) => c.type)} onClose={() => setAdding(false)} onAdded={async (type) => { setAdding(false); toast(type === "ado" ? "Azure DevOps added. Set ADO_PAT, then test the connection." : "SharePoint & OneDrive added. Sign in to Microsoft 365 on its card.", "good"); await load(); }} />}
     </div>
@@ -244,6 +248,52 @@ function OwnerGroupsModal({ c, onClose, onSaved }: { c: Conn; onClose: () => voi
         )}
         {removed.length > 0 && <Callout tone="warn" title="Tickets will be removed">Saving removes the tickets of {removed.map((x) => x.name).join(", ")} from Synora. They stay in HDA and come back if the group is activated again.</Callout>}
       </div>
+    </Modal>
+  );
+}
+
+/** Choose which Azure DevOps work item types are synced. Skipping a type removes its items from Synora. */
+function WorkItemTypes({ c, onClose, onSaved }: { c: Conn; onClose: () => void; onSaved: (message: string) => void }) {
+  const { toast } = useShell();
+  const [types, setTypes] = useState<{ name: string; indexed: number; excluded: boolean }[] | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [skipped, setSkipped] = useState<Set<string>>(new Set());
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    fetch(`/api/connectors/${c.id}/ado/types`).then(async (r) => ({ ok: r.ok, j: await r.json().catch(() => ({})) })).then(({ ok, j }) => {
+      if (!ok) { setNote(j.error ?? "The work item types couldn't be loaded."); setTypes([]); return; }
+      setTypes(j.types); setNote(j.note); setSkipped(new Set((j.types as { name: string; excluded: boolean }[]).filter((t) => t.excluded).map((t) => t.name)));
+    }).catch(() => { setNote("The work item types couldn't be loaded."); setTypes([]); });
+  }, [c.id]);
+  const before = new Set((types ?? []).filter((t) => t.excluded).map((t) => t.name));
+  const changed = types !== null && (skipped.size !== before.size || [...skipped].some((t) => !before.has(t)));
+  const removing = (types ?? []).filter((t) => skipped.has(t.name) && !before.has(t.name));
+  const adding = [...before].filter((t) => !skipped.has(t));
+  const toggle = (name: string) => setSkipped((cur) => { const n = new Set(cur); if (n.has(name)) n.delete(name); else n.add(name); return n; });
+  const save = async () => {
+    setSaving(true);
+    try {
+      const r = await fetch(`/api/connectors/${c.id}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "work-item-types", excluded: [...skipped] }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { toast(j.error ?? "The choice couldn't be saved.", "bad"); return; }
+      onSaved([`${(types ?? []).length - skipped.size} work item types synced.`, j.recordsRemoved ? `${fmtNum(j.recordsRemoved)} items of skipped types left Synora.` : "", j.fullSync ? "A full sync is queued to add the types you turned back on." : ""].filter(Boolean).join(" "));
+    } finally { setSaving(false); }
+  };
+  return (
+    <Modal title="Work item types to sync" subtitle="Untick the types that don't help answers, such as test management items." onClose={onClose} size="lg"
+      footer={<><Btn variant="ghost" onClick={() => setSkipped(new Set(["Test Case", "Test Suite", "Test Plan", "Shared Steps"].filter((t) => (types ?? []).some((x) => x.name === t))))}>Skip test items only</Btn><span className="grow" /><Btn variant="ghost" onClick={onClose}>Cancel</Btn><Btn variant="primary" icon="check" disabled={!changed || saving} onClick={save}>{saving ? "Saving…" : "Save"}</Btn></>}>
+      {note && <Callout tone="info">{note}</Callout>}
+      {types === null ? <p className="muted small">Loading work item types…</p> : (
+        <ul className="check-list wit-list">{types.map((t) => (
+          <li key={t.name}><label className="check">
+            <input type="checkbox" checked={!skipped.has(t.name)} onChange={() => toggle(t.name)} />
+            <span className="grow">{t.name}</span>
+            <span className="muted small num">{t.indexed ? `${fmtNum(t.indexed)} indexed` : skipped.has(t.name) ? "skipped" : "none yet"}</span>
+          </label></li>
+        ))}</ul>
+      )}
+      {removing.length > 0 && <Callout tone="warn" title="Items will be removed">Saving removes {fmtNum(removing.reduce((n, t) => n + t.indexed, 0))} items ({removing.map((t) => t.name).join(", ")}) from Synora. They stay in Azure DevOps.</Callout>}
+      {adding.length > 0 && <Callout tone="info" title="A full sync will run">{adding.join(", ")} {adding.length === 1 ? "was" : "were"} skipped, so those items were never read. Saving queues a full sync of the project to add them, which takes a while.</Callout>}
     </Modal>
   );
 }
