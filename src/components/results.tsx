@@ -203,6 +203,7 @@ function EvidenceItem({ r, top }: { r: RecordCard; top: boolean }) {
         <p className={"ev-excerpt " + (open ? "open" : "")}>{r.excerpt || r.resolution || "No excerpt available."}</p>
         {open && (
           <dl className="ev-dl">
+            {r.analysis && <><dt>Analysis</dt><dd className="ev-pre">{r.analysis}</dd></>}
             {r.rootCause && <><dt>Root cause</dt><dd>{r.rootCause}</dd></>}
             {r.resolution && <><dt>{r.evidenceKind === "approved" ? "Covers" : "Resolution"}</dt><dd>{r.resolution}</dd></>}
             {r.status && <><dt>Status</dt><dd><StatusPill status={r.status} /></dd></>}
@@ -218,6 +219,7 @@ function EvidenceItem({ r, top }: { r: RecordCard; top: boolean }) {
             : <button type="button" className="link-btn" onClick={() => openRecord(r.id)}>Open record <Icon name="right" size={13} /></button>}
           <Badge tone={ROLE_TONE[r.role] ?? "neutral"}>{r.roleLabel}</Badge>
           {r.demo && <Badge tone="violet" icon="info">Demonstration record</Badge>}
+          {r.analysis && <Badge tone="info" icon="activity">Has analysis</Badge>}
           <button type="button" className="link-btn ev-more" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Less" : "More"}</button>
         </div>
       </div>

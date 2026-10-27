@@ -868,3 +868,5 @@ a.admin-link { text-decoration: none; }
 .sync-bar { height: 8px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
 .sync-bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--brand-a), var(--brand-b)); border-radius: 999px; transition: width .4s; }
 .tiny { font-size: .74rem; }
+
+.ev-pre { white-space: pre-wrap; }

@@ -74,3 +74,10 @@ describe("excerpts", () => {
     expect(ex.startsWith("…")).toBe(true);
   });
 });
+
+describe("temporary recovery in development work", () => {
+  it("flags a support work item whose solution was a restart", () => {
+    expect(roleOf({ exactRef: false, similarity: 0.9, matchedTerms: 0 }, { evidenceKind: "dev_work", status: "Closed", rootCause: null, resolution: "We restarted the service" })).toBe("temporary-workaround");
+    expect(roleOf({ exactRef: false, similarity: 0.9, matchedTerms: 0 }, { evidenceKind: "dev_work", status: "Closed", rootCause: null, resolution: "Cleaned up the zipped files" })).toBe("development-work");
+  });
+});

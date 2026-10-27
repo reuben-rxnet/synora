@@ -95,6 +95,9 @@ describe("SharePoint & OneDrive files", () => {
     const sealed = seal("refresh-token-value");
     expect(sealed).not.toContain("refresh-token-value");
     expect(unseal(sealed)).toBe("refresh-token-value");
-    expect(() => unseal(sealed.replace(/.$/, (ch) => (ch === "A" ? "B" : "A")))).toThrow();
+    // Change the first byte of the ciphertext (the last character can be padding bits only, which decode the same).
+    const [iv, tag, data] = sealed.split(".");
+    const flipped = Buffer.from(data!, "base64url"); flipped[0] = flipped[0]! ^ 0xff;
+    expect(() => unseal([iv, tag, flipped.toString("base64url")].join("."))).toThrow();
   });
 });

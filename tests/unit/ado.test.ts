@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseQuery, workItemIds } from "@/lib/search/query";
+import { evidenceBlock } from "@/lib/search/answer";
 import { adoRef, loadAdoMapping, markdownText, pageQuery, parseCursor, parseWikiState, toWikiPage, toWorkItem, wikiReadPlan } from "@/lib/connectors/ado/connector";
 import type { AdoField, AdoWorkItem } from "@/lib/connectors/ado/client";
 
@@ -106,5 +107,30 @@ describe("Azure DevOps references", () => {
   it("are found by any form of the number", () => {
     expect(parseQuery("why is US_207077 blocked").refs).toEqual(["US_207077"]);
     expect(workItemIds(["US_207077", "WI-59418", "A3415102L", "SR_59418"])).toEqual(["207077", "59418"]);
+  });
+});
+
+describe("Azure DevOps analysis and solution", () => {
+  const sr: AdoWorkItem = { id: 117428, fields: {
+    "System.Title": "SR_117428 : RxCNC machines are no longer connected", "System.WorkItemType": "Support Request", "System.State": "Closed",
+    "System.Description": "<div>The machines are not connected.</div>", "Microsoft.VSTS.CMMI.Analysis": "<div>Server was restarted by the Lab.</div>",
+    "Custom.Solution": "<div>We restarted the RxCNC service and the machines reconnected.</div>", "Custom.DeploymentInfo": "Hotfix 26.11.2",
+  } };
+  const item = toWorkItem(sr, m, meta, "https://dev.azure.com/org/p");
+  it("keeps analysis, solution and deployment info as their own sections", () => {
+    expect(item.body).toContain("Analysis:\nServer was restarted by the Lab.");
+    expect(item.body).toContain("Solution:\nWe restarted the RxCNC service");
+    expect(item.body).toContain("Deployment info:\nHotfix 26.11.2");
+    expect(item.body).not.toMatch(/Details:[\s\S]*Solution:/);
+  });
+  it("keeps the analysis as the team's investigation notes, given to the answer step as such", () => {
+    expect((item.raw as { analysis: string }).analysis).toBe("Server was restarted by the Lab.");
+    const block = evidenceBlock([{ id: "E1", recordId: "r", ref: item.ref, sourceSystem: "Azure DevOps", recordType: "work_item", evidenceKind: "dev_work", title: item.title, status: "Closed", application: null, rootCause: null, resolution: item.resolution ?? null, analysis: "Server was restarted by the Lab.", updatedAt: null, excerpt: "", similarity: 0.9, matchedTerms: 0, exactRef: false }]);
+    expect(block).toContain("Analysis (the team's investigation notes): Server was restarted by the Lab.");
+    expect(block).toContain("Resolution: We restarted the RxCNC service");
+  });
+  it("uses the Solution as the item's resolution", () => {
+    expect(item.resolution).toBe("We restarted the RxCNC service and the machines reconnected.");
+    expect(item.ref).toBe("SR_117428");
   });
 });

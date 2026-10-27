@@ -20,6 +20,8 @@ export interface Evidence {
   application: string | null;
   rootCause: string | null;
   resolution: string | null;
+  /** The team's investigation notes (Azure DevOps Analysis): what was checked and found. Not a confirmed cause by itself. */
+  analysis?: string | null;
   updatedAt: Date | null;
   excerpt: string;
   similarity: number;
@@ -73,6 +75,14 @@ export function hasEnoughEvidence(evidence: Evidence[]): boolean {
 export const TEMPORARY = /\b(restart|reboot|re-?ran|retry|retried|temporar)/i;
 const UNCONFIRMED = /\b(not confirmed|suspected|possibly|unknown|discussed)\b/i;
 
+/**
+ * A past fix that only restored service for a while: a restart/retry recorded as the resolution of a ticket or
+ * support work item whose cause isn't confirmed.
+ */
+export function temporaryFix(e: Pick<Evidence, "evidenceKind" | "resolution" | "rootCause" | "status">): boolean {
+  return (e.evidenceKind === "historical" || e.evidenceKind === "dev_work") && TEMPORARY.test(e.resolution ?? "") && !confirmedRootCause(e as Evidence);
+}
+
 export function confirmedRootCause(e: Evidence): boolean {
   return !!e.rootCause && !UNCONFIRMED.test(e.rootCause) && /^(resolved|closed|published)$/i.test(e.status ?? "");
 }
@@ -85,7 +95,7 @@ export function computeConfidence(cited: Evidence[], now = new Date()): Confiden
   if (approved) { score += 2; factors.push(`${approved} approved article${approved > 1 ? "s" : ""}`); }
   const confirmed = cited.some(confirmedRootCause);
   if (confirmed) { score += 1; factors.push("a confirmed root cause"); }
-  const temporary = cited.some((e) => e.evidenceKind === "historical" && TEMPORARY.test(e.resolution ?? "") && !confirmedRootCause(e));
+  const temporary = cited.some((e) => temporaryFix(e));
   if (temporary) { score -= 1; factors.push("past fixes were temporary"); }
   const newest = Math.max(0, ...cited.map((e) => e.updatedAt?.getTime() ?? 0));
   if (newest && now.getTime() - newest > 548 * 864e5) { score -= 1; factors.push("evidence older than 18 months"); }
@@ -100,7 +110,7 @@ export function computeConfidence(cited: Evidence[], now = new Date()): Confiden
 
 export function warningsFor(cited: Evidence[]): AnswerBody["warnings"] {
   const w: AnswerBody["warnings"] = [];
-  if (cited.some((e) => e.evidenceKind === "historical" && TEMPORARY.test(e.resolution ?? "") && !confirmedRootCause(e))) {
+  if (cited.some((e) => temporaryFix(e))) {
     w.push({ kind: "temporary-fix", text: "Restarting the server or service appears to provide temporary recovery. Do not present restart as the permanent resolution unless the underlying cause has been validated." });
   }
   if (cited.length && cited.every((e) => e.evidenceKind === "discussion")) w.push({ kind: "discussion-only", text: "All supporting evidence comes from email or chat discussions, which have not been validated." });
@@ -155,6 +165,7 @@ export function evidenceBlock(evidence: Evidence[]): string {
     `${e.ref} · ${e.sourceSystem} · ${e.recordType} · ${e.evidenceKind}${e.status ? ` · ${e.status}` : ""}${e.updatedAt ? ` · updated ${e.updatedAt.toISOString().slice(0, 10)}` : ""}`,
     `Title: ${safe(e.title)}`,
     e.rootCause ? `Root cause: ${safe(e.rootCause)}` : "",
+    e.analysis ? `Analysis (the team's investigation notes): ${safe(e.analysis).slice(0, 1500)}` : "",
     e.resolution ? `Resolution: ${safe(e.resolution)}` : "",
     `Excerpt: ${safe(e.excerpt)}`,
     "</record>",
@@ -203,7 +214,7 @@ export function composeWithoutAi(_question: string, evidence: Evidence[], invest
   const lead = supported.find((e) => e.evidenceKind === "approved") ?? supported[0];
   if (!lead) return { body: { format: "summary", heading: "", summary: [], explanation: [], steps: [], hypotheses: [], unknowns: [], validation: [], followUps: [], clarification: null }, insufficient: true };
   const similar = supported.filter((e) => e !== lead && e.evidenceKind !== "approved");
-  const temporary = supported.filter((e) => e.evidenceKind === "historical" && TEMPORARY.test(e.resolution ?? "") && !confirmedRootCause(e));
+  const temporary = supported.filter((e) => temporaryFix(e));
   const summary = [{
     text: lead.evidenceKind === "approved"
       ? `Approved guidance in ${lead.ref} covers this: ${firstSentences(lead.resolution ?? lead.excerpt.replace(lead.title, ""), 1)}`

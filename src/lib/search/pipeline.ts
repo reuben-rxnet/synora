@@ -7,7 +7,7 @@ import { canSee } from "@/lib/access";
 import type { Session } from "@/lib/auth/session";
 import { parseQuery } from "./query";
 import { retrieve, type Hit, type SearchFilters } from "./retrieve";
-import { ANSWER_PROMPT_VERSION, activeProvider, computeConfidence, confirmedRootCause, enforceCitations, generate, hasEnoughEvidence, isSupported, TEMPORARY, warningsFor, type AnswerBody, type Confidence, type Evidence } from "./answer";
+import { ANSWER_PROMPT_VERSION, activeProvider, computeConfidence, confirmedRootCause, enforceCitations, generate, hasEnoughEvidence, isSupported, temporaryFix, warningsFor, type AnswerBody, type Confidence, type Evidence } from "./answer";
 import { focusExcerpt, relevanceOf, roleOf, ROLE_LABEL, selectEvidence, SOURCE_GROUP_LABEL, sourceGroup, type EvidenceRole, type Relevance, type SourceGroup } from "./evidence";
 
 export type SearchMode = "ask" | "records" | "similar" | "investigate";
@@ -15,7 +15,7 @@ export type SearchMode = "ask" | "records" | "similar" | "investigate";
 export interface RecordCard {
   id: string; ref: string; title: string; sourceSystem: string; recordType: string; evidenceKind: string;
   status: string | null; application: string | null; location: string | null; ownerGroup: string | null; category: string | null;
-  updatedAt: string | null; similarity: number; rootCause: string | null; resolution: string | null; excerpt: string;
+  updatedAt: string | null; similarity: number; rootCause: string | null; resolution: string | null; analysis: string | null; excerpt: string;
   space: string; sensitivity: string; links: string[]; evidenceId?: string;
   /** Source group for filters ("hda", "ado", "demo"…); demonstration records are always "demo". */
   group: SourceGroup; demo: boolean; sourceUrl: string | null;
@@ -49,6 +49,7 @@ export interface Trust {
 
 type Rec = Prisma.SourceRecordGetPayload<{ include: { space: { select: { name: true } }; linksFrom: { include: { to: { select: { ref: true } } } }; linksTo: { include: { from: { select: { ref: true } } } } } }>;
 const isDemo = (raw: unknown) => (raw as { demo?: boolean } | null)?.demo === true;
+const analysisOf = (raw: unknown) => { const a = (raw as { analysis?: unknown } | null)?.analysis; return typeof a === "string" && a.trim() ? a : null; };
 
 function card(h: Hit, r: Rec, rank: number, terms: string[]): RecordCard {
   const role = roleOf(h, r);
@@ -56,7 +57,7 @@ function card(h: Hit, r: Rec, rank: number, terms: string[]): RecordCard {
     id: r.id, ref: r.ref, title: r.title, sourceSystem: r.sourceSystem, recordType: r.recordType, evidenceKind: r.evidenceKind,
     status: r.status, application: r.application, location: r.location, ownerGroup: r.ownerGroup, category: r.category,
     updatedAt: (r.sourceUpdatedAt ?? r.indexedAt).toISOString(), similarity: Math.round(Math.max(0, Math.min(1, h.similarity)) * 100),
-    rootCause: r.rootCause, resolution: r.resolution, excerpt: focusExcerpt(h.excerpt.replace(r.title, ""), terms),
+    rootCause: r.rootCause, resolution: r.resolution, analysis: analysisOf(r.raw), excerpt: focusExcerpt(h.excerpt.replace(r.title, ""), terms),
     space: r.space.name, sensitivity: r.sensitivity, links: [...r.linksFrom.map((l) => l.to.ref), ...r.linksTo.map((l) => l.from.ref)],
     group: sourceGroup({ sourceSystem: r.sourceSystem, demo: isDemo(r.raw) }), demo: isDemo(r.raw), sourceUrl: isDemo(r.raw) ? null : r.sourceUrl,
     relevance: relevanceOf(h), role, roleLabel: ROLE_LABEL[role], rank,
@@ -117,7 +118,7 @@ async function relatedIssues(hits: Hit[], evidenceIds: Set<string>, recs: Map<st
 }
 
 function toEvidence(h: Hit, r: Rec, i: number): Evidence {
-  return { id: `E${i + 1}`, recordId: r.id, ref: r.ref, sourceSystem: isDemo(r.raw) ? `${r.sourceSystem} (demonstration data)` : r.sourceSystem, recordType: r.recordType, evidenceKind: r.evidenceKind, title: r.title, status: r.status, application: r.application, rootCause: r.rootCause, resolution: r.resolution, updatedAt: r.sourceUpdatedAt, excerpt: h.excerpt, similarity: h.similarity, matchedTerms: h.matchedTerms, termCount: h.termCount, exactRef: h.exactRef };
+  return { id: `E${i + 1}`, recordId: r.id, ref: r.ref, sourceSystem: isDemo(r.raw) ? `${r.sourceSystem} (demonstration data)` : r.sourceSystem, recordType: r.recordType, evidenceKind: r.evidenceKind, title: r.title, status: r.status, application: r.application, rootCause: r.rootCause, resolution: r.resolution, analysis: analysisOf(r.raw), updatedAt: r.sourceUpdatedAt, excerpt: h.excerpt, similarity: h.similarity, matchedTerms: h.matchedTerms, termCount: h.termCount, exactRef: h.exactRef };
 }
 
 export async function* runSearch(session: Session, input: { query: string; mode: SearchMode; filters: SearchFilters }): AsyncGenerator<SearchEvent> {
@@ -211,7 +212,7 @@ export async function* runSearch(session: Session, input: { query: string; mode:
   const confidence = computeConfidence(cited);
   const newest = cited.map((e) => e.updatedAt).filter((d): d is Date => !!d).sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
   const confirmed = cited.some(confirmedRootCause);
-  const temporary = cited.some((e) => e.evidenceKind === "historical" && TEMPORARY.test(e.resolution ?? "") && !confirmedRootCause(e));
+  const temporary = cited.some((e) => temporaryFix(e));
   const trust: Trust = {
     supporting: cited.length, related: shown.length, approved: cited.filter((e) => e.evidenceKind === "approved").length,
     lastEvidence: newest?.toISOString() ?? null, permissionAware: true,

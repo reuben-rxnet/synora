@@ -19,7 +19,7 @@ import { AdoClient, AdoError, type AdoField, type AdoOptions, type AdoWiki, type
 export interface AdoMapping {
   initialLookbackDays: number; pageSize: number; requestDelayMs: number; fetchComments: boolean; maxCommentsPerItem: number; maxBodyChars: number;
   workItemTypes: string[]; excludeWorkItemTypes: string[]; recordTypes: Record<string, SourceItem["recordType"]>; refPrefixes: Record<string, string>;
-  textFields: { field: string; label: string }[]; core: Record<string, string>; skipFields: string[]; skipFieldPrefixes: string[]; hdaRefPattern: string;
+  textFields: { field: string; label: string }[]; resolutionFields?: string[]; analysisFields?: string[]; core: Record<string, string>; skipFields: string[]; skipFieldPrefixes: string[]; hdaRefPattern: string;
   /** approvedPaths: page paths (and everything below) whose pages count as approved knowledge in answers. */
   wiki: { enabled: boolean; approvedPaths: string[]; skipPaths: string[]; maxPages: number; batchSize: number; refreshHours: number; maxRefreshPerSync: number };
 }
@@ -133,11 +133,11 @@ export function toWorkItem(wi: AdoWorkItem, m: AdoMapping, fieldMeta: Map<string
     title: core("title") ?? `${type} ${wi.id}`, body, evidenceKind: "dev_work", approval: "not_reviewed",
     category: type, module: core("area"), environment: core("iteration"), status: core("state"),
     priority: severity ?? (priority ? `Priority ${priority}` : null),
-    rootCause: core("rootCause"), resolution: core("resolution") ?? core("resolvedReason"),
+    rootCause: core("rootCause"), resolution: resolutionOf(f, m) ?? core("resolvedReason"),
     createdAt: toDate(f[m.core.createdAt!]), updatedAt: toDate(f[m.core.changedAt!]),
     sourceUrl: `${projectUrl}/_workitems/edit/${wi.id}`, sensitivity: "internal", acl: [],
     links: [...new Map(links.map((l) => [`${l.kind}:${l.ref}`, l])).values()],
-    raw: { type, rev: wi.rev, fields },
+    raw: { type, rev: wi.rev, fields, analysis: analysisOf(f, m) },
   };
 }
 
@@ -192,6 +192,22 @@ export function wikiReadPlan(pages: AdoWikiPage[], seen: Record<string, { v: str
   const due = pages.filter((p) => seen[p.path] && now - seen[p.path]!.at > m.wiki.refreshHours * 3600_000)
     .sort((a, b) => seen[a.path]!.at - seen[b.path]!.at).slice(0, m.wiki.maxRefreshPerSync);
   return [...fresh, ...due];
+}
+
+/** The team's investigation notes (Analysis): what was checked and found, which helps with the next similar issue. */
+function analysisOf(f: Record<string, unknown>, m: AdoMapping): string | null {
+  const parts = (m.analysisFields ?? []).map((k) => display(f[k], { referenceName: k, name: k, type: "html" })).filter((v): v is string => !!v);
+  const text = parts.join("\n\n");
+  return text ? (text.length > 4000 ? `${text.slice(0, 4000)}…` : text) : null;
+}
+
+/** What fixed the item: the first resolution field filled in (Solution, Resolution…), as plain text. */
+function resolutionOf(f: Record<string, unknown>, m: AdoMapping): string | null {
+  for (const k of m.resolutionFields ?? [m.core.resolution!]) {
+    const v = display(f[k], { referenceName: k, name: k, type: "html" });
+    if (v) return v.length > 4000 ? `${v.slice(0, 4000)}…` : v;
+  }
+  return null;
 }
 
 /** Keyset position: everything changed after `at`, or at `at` with a higher id. */

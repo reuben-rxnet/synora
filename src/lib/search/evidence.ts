@@ -1,6 +1,6 @@
 // Which retrieved hits become the evidence an answer is written from, and how each is described. Shared by the
 // search pipeline and the evaluation (scripts/eval.ts), so both measure the same behaviour.
-import { confirmedRootCause, isSupported, TEMPORARY } from "./answer";
+import { confirmedRootCause, isSupported, temporaryFix } from "./answer";
 import type { Hit } from "./retrieve";
 
 export const EVIDENCE_LIMIT = 8;
@@ -67,9 +67,9 @@ export function roleOf(h: Pick<Hit, "exactRef" | "similarity" | "matchedTerms">,
   const e = { ...r, id: "", recordId: "", ref: "", sourceSystem: "", recordType: "", title: "", application: null, updatedAt: null, excerpt: "", ...h };
   if (r.evidenceKind === "approved") return "authoritative-doc";
   if (r.evidenceKind === "reference") return "documentation";
-  if (r.evidenceKind === "dev_work") return CLOSED_WORK.test(r.status ?? "") ? "development-work" : "investigation";
   if (confirmedRootCause(e)) return "confirmed-resolution";
-  if (r.evidenceKind === "historical" && TEMPORARY.test(r.resolution ?? "")) return "temporary-workaround";
+  if (temporaryFix(e)) return "temporary-workaround";
+  if (r.evidenceKind === "dev_work") return CLOSED_WORK.test(r.status ?? "") ? "development-work" : "investigation";
   return "similar-incident";
 }
 
