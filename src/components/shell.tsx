@@ -23,7 +23,7 @@ export const useShell = () => useContext(Ctx)!;
 
 const NAV = [
   ["/", "Search", "search"], ["/similar", "Similar Issues", "similar"], ["/analytics", "Analytics", "chart"],
-  ["/sources", "Sources", "plug"], ["/saved", "Saved", "bookmark"], ["/admin", "Administration", "shield"],
+  ["/sources", "Sources", "plug"], ["/saved", "Saved", "bookmark"], ["/admin", "Administration", "shield"], ["/about", "About", "info"],
 ] as const;
 
 type Theme = "system" | "light" | "dark";
@@ -242,6 +242,7 @@ function Help({ onClose }: { onClose: () => void }) {
       <p className="small">Synora only answers from records you are allowed to open. Every claim cites its source. When the evidence is too thin, it says so instead of guessing.</p>
       <span className="eyebrow">Keyboard</span>
       <dl className="rd-dl"><dt><kbd>/</kbd></dt><dd>Focus the search box</dd><dt><kbd>Enter</kbd></dt><dd>Submit (Shift+Enter for a new line)</dd><dt><kbd>Esc</kbd></dt><dd>Close dialogs and panels</dd></dl>
+      <Btn icon="book" onClick={() => go("/about#guides")}>Read the full guides</Btn>
     </Modal>
   );
 }
