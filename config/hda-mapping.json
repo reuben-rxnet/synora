@@ -1,0 +1,55 @@
+{
+  "_readme": "HDA property names for Synora. Field names were verified against HDA QA by CSAT Pulse on 2026-10-16 (D:\\Projects\\CSAT_HDA\\config\\hda-mapping.json); fields marked in _unverified still need `npm run hda:discover`. Incidents and Requests are both entity Incident, told apart by ObjectTypeID. Each type says which Synora space it belongs to and who may see it.",
+  "entity": "Incident",
+  "objectTypeProperty": "ObjectTypeID",
+  "statusProperty": "TicketStatusID",
+  "solvedStatusIds": ["S18C", "S5"],
+  "cursorProperty": "C70C",
+  "cursorOperator": "gt",
+  "initialLookbackDays": 730,
+  "pageSize": 200,
+  "fetchFullText": true,
+  "columns": {
+    "id": "ID",
+    "subject": "Subject",
+    "description": "ProblemHTML",
+    "solution": "SolutionHTML",
+    "objectType": "ObjectTypeID",
+    "status": "TicketStatusID",
+    "source": "TicketSource.Description",
+    "ownerGroupId": "OwnerUserGroupID",
+    "ownerGroupName": "OwnerUserGroup.Description",
+    "ticketOwner": "AssignedUser.FullName",
+    "priority": "TicketPriority.Description",
+    "category": "Service.Description",
+    "location": "Location.Description",
+    "resolutionType": "C210L",
+    "openedAt": "Date",
+    "solvedAt": "C70C"
+  },
+  "statusLabels": { "S18C": "Resolved", "S5": "Closed", "S3C": "Open" },
+  "types": [
+    { "ids": ["T10C", "T10L"], "label": "Incident", "recordType": "incident", "space": "it-support", "visibility": "space" },
+    { "ids": ["1"], "label": "Service Request", "recordType": "request", "space": "it-support", "visibility": "space" },
+    { "ids": ["T12L"], "label": "HR Service Request", "recordType": "request", "space": "hr", "visibility": "owner-group", "sensitivity": "restricted" },
+    { "ids": ["T8C"], "label": "Incident HCM", "recordType": "incident", "space": "hr", "visibility": "owner-group", "sensitivity": "restricted" },
+    { "ids": ["T27L", "T19L"], "label": "Retail incident", "recordType": "incident", "space": "retail", "visibility": "space" },
+    { "ids": ["T14L"], "label": "Incident SSS", "recordType": "incident", "space": "shared-services", "visibility": "space" },
+    { "ids": ["T16L"], "label": "Service Request SSS", "recordType": "request", "space": "shared-services", "visibility": "space" },
+    { "ids": ["T29L"], "label": "Car Fleet request", "recordType": "request", "space": "facilities", "visibility": "space" }
+  ],
+  "neverIndex": {
+    "_readme": "Sensitive ticket types that are never copied into Synora.",
+    "ids": ["T21L", "T24L", "T25L", "T26L", "T30L"],
+    "labels": ["Security Incident", "Quality issue", "Intellectual Property Violation", "Master Data Management", "Report Leaks"]
+  },
+  "access": {
+    "entity": "UserGroupAssignment",
+    "username": "User.Username",
+    "upn": "User.USERUPN",
+    "groupId": "UserGroupID",
+    "groupName": "UserGroup.Description"
+  },
+  "ticketUrl": "{base}/Incident/{id}",
+  "_unverified": ["Location.Description", "C210L (ResolutionType) values", "ticketUrl format", "TicketStatusID labels beyond S18C/S5/S3C"]
+}

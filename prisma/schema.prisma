@@ -1,0 +1,399 @@
+// Synora data model. PostgreSQL 16 + pgvector. Vector and full-text columns are queried with raw SQL
+// (src/lib/search/retrieve.ts); their indexes are created by scripts/db-indexes.ts.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector, pg_trgm]
+}
+
+// ---------- Identity and access ----------
+
+/// A department or domain: IT Support, Development, HR, Finance… Content belongs to a space,
+/// and people see a space's content only through their memberships.
+model Space {
+  id          String   @id @default(cuid())
+  key         String   @unique // "it-support", "hr"
+  name        String
+  description String   @default("")
+  /// restricted: only members see the space exists; internal: everyone can request access.
+  visibility  String   @default("internal")
+  createdAt   DateTime @default(now())
+
+  members    SpaceMember[]
+  connectors Connector[]
+  records    SourceRecord[]
+}
+
+model User {
+  id          String    @id @default(cuid())
+  email       String    @unique
+  displayName String
+  initials    String
+  jobTitle    String    @default("")
+  department  String    @default("")
+  /// Entra object id when signed in through Entra; HDA username when known.
+  entraOid    String?   @unique
+  hdaUsername String?
+  /// Comma-separated global roles: search-user, support-engineer, connector-owner, knowledge-manager, administrator, auditor
+  roles       String    @default("search-user")
+  active      Boolean   @default(true)
+  lastSeenAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  groups      UserGroup[]
+  spaces      SpaceMember[]
+  searches    Search[]
+  savedItems  SavedItem[]
+  collections Collection[]
+  feedback    Feedback[]
+}
+
+/// A group from a source system or Entra: an HDA owner group, an Entra security group, an ADO team.
+/// Record permissions name groups by key, e.g. "hda:G815L" or "entra:<object id>".
+model Group {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  name      String
+  source    String // hda | entra | ado | synora
+  syncedAt  DateTime @default(now())
+  members   UserGroup[]
+}
+
+model UserGroup {
+  userId  String
+  groupId String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([userId, groupId])
+}
+
+model SpaceMember {
+  spaceId String
+  userId  String
+  /// member: searches the space; editor: also curates knowledge; owner: manages connectors and members.
+  role    String @default("member")
+  space   Space  @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([spaceId, userId])
+}
+
+// ---------- Connectors and sync ----------
+
+model Connector {
+  id          String    @id @default(cuid())
+  type        String // demo | hda | csv | ado | sharepoint | …
+  name        String
+  spaceId     String
+  space       Space     @relation(fields: [spaceId], references: [id])
+  /// Non-secret settings (scope, ticket types, mapping file…). Secrets are never stored here.
+  config      Json      @default("{}")
+  /// Key Vault reference or env variable name, e.g. "kv://synora/hda-api" or "env:HDA_PASSWORD".
+  secretRef   String?
+  ownerGroup  String    @default("")
+  status      String    @default("not_configured") // connected | syncing | action_required | paused | failed | not_configured
+  statusNote  String?
+  schedule    String    @default("hourly") // 15min | hourly | 6h | daily | manual
+  /// Opaque position for incremental sync (a timestamp watermark, a Graph delta link…).
+  cursor      String?
+  lastSyncAt  DateTime?
+  nextSyncAt  DateTime?
+  recordCount Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  mappings FieldMapping[]
+  runs     SyncRun[]
+  records  SourceRecord[]
+}
+
+model FieldMapping {
+  id          String    @id @default(cuid())
+  connectorId String
+  connector   Connector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  sourceField String
+  targetField String
+  transform   String? // strip_html | lower | date
+
+  @@unique([connectorId, targetField])
+}
+
+model SyncRun {
+  id          String    @id @default(cuid())
+  connectorId String
+  connector   Connector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  kind        String // full | incremental | test
+  status      String    @default("running") // running | succeeded | partial | failed
+  startedAt   DateTime  @default(now())
+  finishedAt  DateTime?
+  added       Int       @default(0)
+  updated     Int       @default(0)
+  unchanged   Int       @default(0)
+  deleted     Int       @default(0)
+  failed      Int       @default(0)
+  /// Error code and plain-language message only; never raw provider responses.
+  errorCode   String?
+  errorText   String?
+
+  errors SyncError[]
+
+  @@index([connectorId, startedAt])
+}
+
+model SyncError {
+  id         String   @id @default(cuid())
+  runId      String
+  run        SyncRun  @relation(fields: [runId], references: [id], onDelete: Cascade)
+  externalId String?
+  code       String
+  message    String
+  at         DateTime @default(now())
+}
+
+/// Simple Postgres job queue (FOR UPDATE SKIP LOCKED), polled by src/worker.
+model Job {
+  id          String    @id @default(cuid())
+  kind        String // sync | embed | cluster
+  payload     Json      @default("{}")
+  status      String    @default("queued") // queued | running | done | failed
+  runAt       DateTime  @default(now())
+  lockedUntil DateTime?
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
+  lastError   String?
+  createdAt   DateTime  @default(now())
+  finishedAt  DateTime?
+
+  @@index([status, runAt])
+}
+
+// ---------- Content ----------
+
+model SourceRecord {
+  id           String    @id @default(cuid())
+  connectorId  String
+  connector    Connector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  spaceId      String
+  space        Space     @relation(fields: [spaceId], references: [id])
+  externalId   String
+  ref          String // what people call it: A5058563L, BUG-1842, KB-RX-0217
+  /// Where the record lives, as people name it: "HDA Ticketing", "Azure DevOps", "SharePoint".
+  sourceSystem String   @default("")
+  recordType   String // incident | request | bug | work_item | document | email | chat | knowledge_article
+  title        String
+  body         String
+  /// approved | historical | discussion | dev_work
+  evidenceKind String
+  approval     String    @default("not_reviewed") // approved | historical | not_reviewed | draft
+  application  String?
+  module       String?
+  environment  String?
+  location     String?
+  category     String?
+  ownerGroup   String?
+  priority     String?
+  status       String?
+  rootCause    String?
+  resolution   String?
+  errorCodes   String[]  @default([])
+  sourceUrl    String?
+  sourceCreatedAt DateTime?
+  sourceUpdatedAt DateTime?
+  /// public | internal | confidential | restricted
+  sensitivity  String    @default("internal")
+  /// Principal keys allowed to see this record: "space:<id>", "group:<key>", "user:<id>", "everyone".
+  acl          String[]
+  contentHash  String
+  raw          Json?
+  deletedAt    DateTime?
+  indexedAt    DateTime  @default(now())
+
+  chunks    Chunk[]
+  linksFrom RecordLink[] @relation("linkFrom")
+  linksTo   RecordLink[] @relation("linkTo")
+  citations Citation[]
+  issueGroups IssueGroupMember[]
+
+  @@unique([connectorId, externalId])
+  @@index([spaceId])
+  @@index([ref])
+}
+
+model Chunk {
+  id        String       @id @default(cuid())
+  recordId  String
+  record    SourceRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  ordinal   Int
+  text      String
+  embedding Unsupported("vector(384)")?
+  tsv       Unsupported("tsvector")?
+
+  @@unique([recordId, ordinal])
+}
+
+model RecordLink {
+  fromId String
+  toId   String
+  kind   String // linked | duplicate | parent | mentions
+  from   SourceRecord @relation("linkFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to     SourceRecord @relation("linkTo", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@id([fromId, toId, kind])
+}
+
+/// Spelling variants that should count as one application ("RXCNC", "Rx CNC" → "RxCNC").
+model ApplicationAlias {
+  alias       String @id
+  application String
+}
+
+model IssueGroup {
+  id          String   @id @default(cuid())
+  spaceId     String
+  title       String
+  application String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  members     IssueGroupMember[]
+}
+
+model IssueGroupMember {
+  groupId  String
+  recordId String
+  group    IssueGroup   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  record   SourceRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, recordId])
+}
+
+// ---------- Search and answers ----------
+
+model Search {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  query     String
+  mode      String // ask | records | similar | investigate
+  filters   Json     @default("{}")
+  createdAt DateTime @default(now())
+  answer    Answer?
+
+  @@index([userId, createdAt])
+}
+
+model Answer {
+  id            String   @id @default(cuid())
+  searchId      String   @unique
+  search        Search   @relation(fields: [searchId], references: [id], onDelete: Cascade)
+  /// answered | insufficient | failed
+  outcome       String
+  body          Json // validated answer: summary, steps, warnings, hypotheses
+  confidence    String? // high | medium | low
+  confidenceWhy String?
+  provider      String // mock | openai
+  modelId       String?
+  promptVersion String
+  inputTokens   Int?
+  outputTokens  Int?
+  latencyMs     Int
+  createdAt     DateTime @default(now())
+
+  citations Citation[]
+  feedback  Feedback[]
+}
+
+model Citation {
+  answerId String
+  recordId String
+  ordinal  Int
+  answer   Answer       @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  record   SourceRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+
+  @@id([answerId, recordId])
+}
+
+model Feedback {
+  id        String   @id @default(cuid())
+  answerId  String
+  userId    String
+  answer    Answer   @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  helpful   Boolean
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@unique([answerId, userId])
+}
+
+// ---------- Workspace ----------
+
+model SavedItem {
+  id           String      @id @default(cuid())
+  userId       String
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind         String // search | answer | record
+  name         String
+  query        String?
+  mode         String?
+  answerId     String?
+  recordId     String?
+  tags         String[]    @default([])
+  collectionId String?
+  collection   Collection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+  createdAt    DateTime    @default(now())
+
+  @@index([userId])
+}
+
+model Collection {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  note      String      @default("")
+  createdAt DateTime    @default(now())
+  items     SavedItem[]
+}
+
+// ---------- Governance and platform ----------
+
+model KnowledgeCandidate {
+  id          String   @id @default(cuid())
+  spaceId     String
+  title       String
+  draft       String
+  sourceIds   String[]
+  status      String   @default("review") // draft | review | changes_requested | approved | published | archived | rejected
+  reviewerId  String?
+  checklist   Json     @default("{}")
+  comment     String?
+  createdBy   String // user id or "synora"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AuditEvent {
+  id        String   @id @default(cuid())
+  at        DateTime @default(now())
+  actorId   String? // null = system
+  action    String // search.ask | record.view | connector.sync | settings.update | knowledge.approve …
+  target    String?
+  detail    Json     @default("{}")
+
+  @@index([at])
+  @@index([action])
+}
+
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}

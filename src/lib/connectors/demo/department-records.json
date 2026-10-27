@@ -1,0 +1,48 @@
+[
+ {
+  "externalId": "HR-KB-014", "ref": "HR-KB-014", "recordType": "knowledge_article", "source": "SharePoint", "spaceKey": "hr",
+  "title": "Parental leave: how to request it and what to attach",
+  "body": "Employees request parental leave in Workday under Time Off at least eight weeks before the start date. Attach the expected date of birth or adoption confirmation. HR confirms within five working days. Leave of up to 20 weeks is paid at full salary; the remaining weeks follow local law. Managers are notified automatically once HR approves.",
+  "evidenceKind": "approved", "category": "Leave", "ownerGroup": "HR Operations", "status": "Published",
+  "resolution": "Request in Workday Time Off, attach the confirmation, HR confirms within 5 working days.", "createdAt": "2025-11-03", "updatedAt": "2026-09-15"
+ },
+ {
+  "externalId": "HR-CASE-2291", "ref": "HR-CASE-2291", "recordType": "request", "source": "HDA Ticketing", "spaceKey": "hr", "sensitivity": "restricted", "aclGroups": ["hda:G-HROPS"],
+  "title": "Workday shows wrong leave balance after transfer between entities",
+  "body": "After moving from the Dublin entity to the Lyon entity, the employee's leave balance in Workday shows zero days. The accrual plan from the old entity was not carried over.",
+  "evidenceKind": "historical", "category": "Workday", "ownerGroup": "HR Operations", "status": "Resolved",
+  "rootCause": "Accrual plan not mapped during the inter-entity transfer.", "resolution": "HR Systems re-ran the balance conversion for the transfer date and added the mapping to the transfer checklist.",
+  "createdAt": "2026-08-11", "updatedAt": "2026-08-14"
+ },
+ {
+  "externalId": "HR-CASE-2307", "ref": "HR-CASE-2307", "recordType": "request", "source": "HDA Ticketing", "spaceKey": "hr", "sensitivity": "restricted", "aclGroups": ["hda:G-HROPS"],
+  "title": "Payslip not visible in Workday for new joiners in Bangalore",
+  "body": "Three new joiners cannot see their first payslip in Workday. Payroll confirmed payment was made.",
+  "evidenceKind": "historical", "category": "Payroll", "ownerGroup": "HR Operations", "status": "Closed",
+  "rootCause": "Payslip publication job ran before the new joiners' security roles were assigned.", "resolution": "Re-published the payslips after the roles were assigned; moved the publication job one day later.",
+  "createdAt": "2026-09-02", "updatedAt": "2026-09-04"
+ },
+ {
+  "externalId": "FIN-KB-031", "ref": "FIN-KB-031", "recordType": "knowledge_article", "source": "Confluence", "spaceKey": "finance",
+  "title": "Month-end close: intercompany reconciliation checklist",
+  "body": "Run the intercompany mismatch report in SAP (transaction ZIC01) on working day 2. Differences above 500 EUR need a comment from both entities. Post corrections before 18:00 CET on working day 3. FX differences under 0.5% are cleared automatically by the revaluation run.",
+  "evidenceKind": "approved", "category": "Month-end close", "ownerGroup": "Group Accounting", "status": "Published",
+  "resolution": "Run ZIC01 on WD2, comment differences above 500 EUR, post corrections by WD3 18:00 CET.", "createdAt": "2025-06-20", "updatedAt": "2026-07-01"
+ },
+ {
+  "externalId": "FIN-INC-0412", "ref": "FIN-INC-0412", "recordType": "incident", "source": "HDA Ticketing", "spaceKey": "finance",
+  "title": "SAP revaluation run fails with FX rate missing for BRL",
+  "body": "The month-end FX revaluation stopped with message 'Exchange rate type M for BRL/EUR not maintained'. The daily rate feed from the bank was delayed. Errors: FX_404",
+  "evidenceKind": "historical", "category": "Month-end close", "ownerGroup": "SAP FI Support", "status": "Closed", "application": "SAP FI",
+  "rootCause": "Daily rate feed arrived after the revaluation job started.", "resolution": "Loaded the BRL rate manually from the treasury file and re-ran revaluation; job now waits for the feed.",
+  "createdAt": "2026-05-31", "updatedAt": "2026-06-01"
+ },
+ {
+  "externalId": "DEV-WIKI-RX-07", "ref": "DEV-WIKI-RX-07", "recordType": "document", "source": "Azure DevOps", "spaceKey": "development",
+  "title": "RxCNC dispatcher: connection pool settings and how to tune them",
+  "body": "The dispatcher uses a pool of 512 sessions (pool.maxSessions). Sessions are returned in the job completion handler. Aborted jobs go through the cancellation path, which must call releaseSession(). Monitor dispatcher_pool_active; alert above 80% for 10 minutes.",
+  "evidenceKind": "approved", "category": "Performance", "ownerGroup": "Platform Engineering", "status": "Published", "application": "RxCNC", "module": "Job dispatcher",
+  "resolution": "Ensure cancellation path calls releaseSession(); alert on dispatcher_pool_active above 80%.", "createdAt": "2026-02-10", "updatedAt": "2026-10-05",
+  "links": [{ "ref": "BUG-1842", "kind": "linked" }]
+ }
+]
