@@ -248,27 +248,8 @@ export const adoConnector: Connector = {
     try {
       const fieldMeta = new Map((await client.fields()).map((f) => [f.referenceName, f]));
       const deleted = (await client.deletedIds()).map(String);
-      for (;;) {
-        const ids = await client.wiql(pageQuery(m, pos), m.pageSize);
-        if (!ids.length) break;
-        const byId = new Map((await client.workItems(ids)).map((w) => [w.id, w]));
-        const items: SourceItem[] = [];
-        for (const id of ids) {
-          const wi = byId.get(id);
-          if (!wi) continue; // deleted or moved between the two calls
-          let comments: { text: string; createdDate: string }[] = [];
-          if (m.fetchComments && Number(wi.fields[m.core.commentCount!] ?? 0) > 0) {
-            try { comments = (await client.comments(id, m.maxCommentsPerItem)).filter((c) => !c.isDeleted); }
-            catch { ctx.log(`Comments of work item ${id} could not be read; indexed without them.`); }
-          }
-          items.push(toWorkItem(wi, m, fieldMeta, client.projectUrl, comments));
-          const at = toDate(wi.fields[m.core.changedAt!]);
-          if (at) pos = { at: at.toISOString(), id };
-        }
-        yield { items, cursor: state(), done: false };
-        if (ids.length < m.pageSize) break;
-      }
-
+      // Wikis first: they are small (minutes, not hours) and give answers the most context, so a long work item
+      // backlog never holds them back. Work items then continue from their own saved position.
       if (m.wiki.enabled) {
         try {
           const next: WikiState = {};
@@ -306,6 +287,28 @@ export const adoConnector: Connector = {
           ctx.log(`The project wikis could not be read (${e.message}).`);
         }
       }
+
+      for (;;) {
+        const ids = await client.wiql(pageQuery(m, pos), m.pageSize);
+        if (!ids.length) break;
+        const byId = new Map((await client.workItems(ids)).map((w) => [w.id, w]));
+        const items: SourceItem[] = [];
+        for (const id of ids) {
+          const wi = byId.get(id);
+          if (!wi) continue; // deleted or moved between the two calls
+          let comments: { text: string; createdDate: string }[] = [];
+          if (m.fetchComments && Number(wi.fields[m.core.commentCount!] ?? 0) > 0) {
+            try { comments = (await client.comments(id, m.maxCommentsPerItem)).filter((c) => !c.isDeleted); }
+            catch { ctx.log(`Comments of work item ${id} could not be read; indexed without them.`); }
+          }
+          items.push(toWorkItem(wi, m, fieldMeta, client.projectUrl, comments));
+          const at = toDate(wi.fields[m.core.changedAt!]);
+          if (at) pos = { at: at.toISOString(), id };
+        }
+        yield { items, cursor: state(), done: false };
+        if (ids.length < m.pageSize) break;
+      }
+
       yield { items: [], deleted, cursor: state(), done: true };
     } catch (e) {
       throw toConnectorError(e);
