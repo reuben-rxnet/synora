@@ -72,6 +72,11 @@ async function loadRecords(ids: string[]) {
   return new Map(recs.map((r) => [r.id, r]));
 }
 
+/** Sources that explain how things work, searched separately for functional background. */
+const DOC_SOURCES = ["Azure DevOps Wiki", "SharePoint", "OneDrive"];
+/** Documentation below this similarity is too far from the question to explain anything useful. */
+const DOC_MIN_SIMILARITY = 0.83;
+
 const CONNECTOR_GROUPS: Record<string, SourceGroup[]> = { hda: ["hda"], ado: ["ado", "ado-wiki"], m365: ["sharepoint", "onedrive"], demo: ["demo"] };
 
 /** Per source: whether it was searched for this person (connected and holding records they can see). */
@@ -178,7 +183,19 @@ export async function* runSearch(session: Session, input: { query: string; mode:
     return;
   }
 
+  // Functional background: the most relevant documentation (wiki pages, SharePoint/OneDrive documents) is searched on
+  // its own, because tickets usually outrank it, and up to two pages are added so the answer can explain how the
+  // affected part works. They must still be related to the question, and a source filter that excludes them is respected.
   const supported = evidence.filter(isSupported);
+  const docs = DOC_SOURCES.filter((s) => !input.filters.sourceSystems?.length || input.filters.sourceSystems.includes(s));
+  if (docs.length) {
+    const docHits = await retrieve(q, session.principals, { ...filters, sourceSystems: docs }, 6);
+    const extra = docHits.filter((h) => h.similarity >= DOC_MIN_SIMILARITY && !evidence.some((e) => e.recordId === h.recordId)).slice(0, 2);
+    if (extra.length) {
+      const more = await loadRecords(extra.map((h) => h.recordId));
+      for (const h of extra) { const r = more.get(h.recordId); if (r) { recs.set(r.id, r); hits.push(h); chosen.push(h); const e = toEvidence(h, r, evidence.length); evidence.push(e); supported.push(e); } }
+    }
+  }
   const shown = supported.flatMap((e) => { const h = chosen.find((x) => x.recordId === e.recordId)!; return cardFor(h, hits.indexOf(h)).map((c) => ({ ...c, evidenceId: e.id })); });
   const totalMatches = hits.filter(isSupported).length;
   const [sources, related] = await Promise.all([coverage(session.principals, shown), relatedIssues(hits, new Set(shown.map((c) => c.id)), recs, session.principals)]);
@@ -202,7 +219,7 @@ export async function* runSearch(session: Session, input: { query: string; mode:
     return;
   }
 
-  const citedIds = new Set([...checked.summary, ...checked.explanation, ...checked.steps, ...checked.hypotheses].flatMap((x) => x.citations));
+  const citedIds = new Set([...checked.summary, ...checked.background, ...checked.explanation, ...checked.steps, ...checked.hypotheses].flatMap((x) => x.citations));
   const cited = supported.filter((e) => citedIds.has(e.id));
   const warnings = warningsFor(cited);
   if (warnings.some((w) => w.kind === "historical" || w.kind === "temporary-fix")) {

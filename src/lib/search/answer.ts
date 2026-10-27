@@ -36,6 +36,8 @@ export interface AnswerBody {
   heading: string;
   /** The direct answer. Every sentence cites the records that state it. */
   summary: { text: string; citations: string[] }[];
+  /** How the affected application or process works, from documentation (wiki pages, documents). Always cited. */
+  background: { text: string; citations: string[] }[];
   /** documented and pattern items cite their records; a hypothesis is an interpretation and may cite none. */
   explanation: { text: string; status: "documented" | "pattern" | "hypothesis"; citations: string[] }[];
   /** documented steps cite the record describing them; recommended ones are Synora's suggestion. */
@@ -137,6 +139,7 @@ export function enforceCitations(body: Draft, evidence: Evidence[]): Draft {
     format: body.format,
     heading: plain(body.heading).slice(0, 120),
     summary: cited(body.summary).filter((x) => x.citations.length > 0),
+    background: cited(body.background ?? []).filter((x) => x.citations.length > 0).slice(0, 3),
     explanation: cited(body.explanation).filter((x) => x.status === "hypothesis" || x.citations.length > 0).slice(0, 4),
     steps: cited(body.steps).map((x) => (x.basis === "documented" && !x.citations.length ? { ...x, basis: "recommended" as const } : x)).slice(0, 6),
     hypotheses: cited(body.hypotheses).filter((x) => x.citations.length > 0).slice(0, 4),
@@ -150,6 +153,7 @@ const modelOutput = z.object({
   format: z.enum(["troubleshooting", "factual", "comparison", "summary"]),
   heading: z.string(),
   summary: z.array(z.object({ text: z.string(), citations: z.array(z.string()) })),
+  background: z.array(z.object({ text: z.string(), citations: z.array(z.string()) })),
   explanation: z.array(z.object({ text: z.string(), status: z.enum(["documented", "pattern", "hypothesis"]), citations: z.array(z.string()) })),
   steps: z.array(z.object({ title: z.string(), detail: z.string(), basis: z.enum(["documented", "recommended"]), citations: z.array(z.string()) })),
   hypotheses: z.array(z.object({ text: z.string(), status: z.string(), citations: z.array(z.string()) })),
@@ -212,7 +216,7 @@ const firstSentences = (s: string, n = 2) => (s.replace(/\s+/g, " ").match(/[^.!
 export function composeWithoutAi(_question: string, evidence: Evidence[], investigate: boolean): { body: Draft; insufficient: boolean } {
   const supported = evidence.filter(isSupported).slice(0, 5);
   const lead = supported.find((e) => e.evidenceKind === "approved") ?? supported[0];
-  if (!lead) return { body: { format: "summary", heading: "", summary: [], explanation: [], steps: [], hypotheses: [], unknowns: [], validation: [], followUps: [], clarification: null }, insufficient: true };
+  if (!lead) return { body: { format: "summary", heading: "", summary: [], background: [], explanation: [], steps: [], hypotheses: [], unknowns: [], validation: [], followUps: [], clarification: null }, insufficient: true };
   const similar = supported.filter((e) => e !== lead && e.evidenceKind !== "approved");
   const temporary = supported.filter((e) => temporaryFix(e));
   const summary = [{
@@ -260,7 +264,10 @@ export function composeWithoutAi(_question: string, evidence: Evidence[], invest
   ].slice(0, 4);
   const format: AnswerFormat = temporary.length || confirmed.length || investigate ? "troubleshooting" : "summary";
   const heading = lead.evidenceKind === "approved" ? `Approved guidance: ${lead.title}` : temporary.length && !confirmed.length ? "Temporary recovery seen; root cause not confirmed" : lead.title;
-  return { body: { format, heading: heading.slice(0, 120), summary, explanation, steps, hypotheses, unknowns, validation, followUps, clarification: null }, insufficient: false };
+  // Functional background: the opening of the most relevant documentation record, cited.
+  const background = evidence.filter((e) => e.evidenceKind === "reference" || e.evidenceKind === "approved").slice(0, 1)
+    .map((e) => ({ text: `${e.title}: ${firstSentences(e.excerpt.replace(/^Wiki page [^\n]*\n+/, ""), 2)}`, citations: [e.id] }));
+  return { body: { format, heading: heading.slice(0, 120), summary, background, explanation, steps, hypotheses, unknowns, validation, followUps, clarification: null }, insufficient: false };
 }
 
 export { ANSWER_PROMPT_VERSION };

@@ -71,7 +71,7 @@ const EXPLAIN: Record<string, [string, string]> = { documented: ["Documented", "
 
 export function AnswerPanel({ a, evidence, onAsk, actions }: { a: AnswerData; evidence: RecordCard[]; onAsk: (q: string) => void; actions: React.ReactNode }) {
   const b = a.body;
-  const citedIds = new Set([...b.summary, ...b.explanation, ...b.steps, ...b.hypotheses].flatMap((x) => x.citations));
+  const citedIds = new Set([...b.summary, ...(b.background ?? []), ...b.explanation, ...b.steps, ...b.hypotheses].flatMap((x) => x.citations));
   const cited = evidence.filter((e) => e.evidenceId && citedIds.has(e.evidenceId));
   const levels = ["low", "medium", "high"];
   const level = { low: "Limited", medium: "Moderate", high: "Strong" }[a.confidence.level];
@@ -108,6 +108,14 @@ export function AnswerPanel({ a, evidence, onAsk, actions }: { a: AnswerData; ev
 
       {b.clarification && <Callout tone="info" title="To narrow this down">{b.clarification} <button type="button" className="link-btn" onClick={() => onAsk(b.clarification!)}>Use as follow-up</button></Callout>}
       {b.warnings.filter((w) => w.kind === "temporary-fix" || w.kind === "discussion-only").map((w) => <Callout key={w.kind} tone="warn" title="Validate before applying">{w.text}</Callout>)}
+
+      {(b.background ?? []).length > 0 && (
+        <section className="ans-block ans-background" aria-labelledby="bg-h">
+          <h3 id="bg-h"><Icon name="book" size={18} />How it works</h3>
+          <p className="small muted">Functional background from the documentation.</p>
+          <p className="summary">{b.background.map((x, i) => <span key={i}>{x.text}<Cites ids={x.citations} evidence={evidence} /> </span>)}</p>
+        </section>
+      )}
 
       {b.explanation.length > 0 && (
         <section className="ans-block ans-explain" aria-labelledby="exp-h">

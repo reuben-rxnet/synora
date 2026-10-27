@@ -56,7 +56,7 @@ describe("evidence and citations", () => {
     expect(hasEnoughEvidence([ev({}), ev({ id: "E2" })])).toBe(true);
     expect(hasEnoughEvidence([ev({ evidenceKind: "approved" })])).toBe(true);
   });
-  const draft = (over: Partial<Parameters<typeof enforceCitations>[0]>) => ({ format: "troubleshooting" as const, heading: "h", summary: [], explanation: [], steps: [], hypotheses: [], unknowns: [], validation: [], followUps: [], clarification: null, ...over });
+  const draft = (over: Partial<Parameters<typeof enforceCitations>[0]>) => ({ format: "troubleshooting" as const, heading: "h", summary: [], background: [], explanation: [], steps: [], hypotheses: [], unknowns: [], validation: [], followUps: [], clarification: null, ...over });
   it("drops invented citations and claims left without one", () => {
     const out = enforceCitations(draft({ summary: [{ text: "ok", citations: ["e1", "E9"] }, { text: "made up", citations: ["E7"] }] }), [ev({})]);
     expect(out.summary).toEqual([{ text: "ok", citations: ["E1"] }]);
@@ -68,6 +68,10 @@ describe("evidence and citations", () => {
     }), [ev({})]);
     expect(out.steps.map((x) => x.basis)).toEqual(["recommended", "recommended"]);
     expect(out.explanation).toEqual([{ text: "Maybe a leak", status: "hypothesis", citations: [] }]);
+  });
+  it("keeps functional background only when a document is cited", () => {
+    const out = enforceCitations(draft({ background: [{ text: "SML prioritises orders by rule", citations: ["E1"] }, { text: "Invented background", citations: [] }] }), [ev({})]);
+    expect(out.background).toEqual([{ text: "SML prioritises orders by rule", citations: ["E1"] }]);
   });
   it("removes evidence ids left in plain-text lists", () => {
     expect(enforceCitations(draft({ unknowns: ["The cause [E1] is unconfirmed ."], followUps: ["What fixed E2?"] }), [ev({})])).toMatchObject({ unknowns: ["The cause is unconfirmed."], followUps: ["What fixed?"] });
